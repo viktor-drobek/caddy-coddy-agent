@@ -1,0 +1,12 @@
+# .env and secrets
+.env
+.env.bak*
+*.bak*
+
+# Python
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+logs/
