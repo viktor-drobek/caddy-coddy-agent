@@ -1,0 +1,15 @@
+# Workflow: Continuous health check
+
+name: Health Check
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check stack health
+        run: ./scripts/health-check.sh .
