@@ -40,7 +40,9 @@ bash "$CC/scripts/validate.sh" <project>
 3. Validate. `validate.sh` runs `bash -n` on every script, parses every JSON file, and runs
    `docker compose config -q` and `caddy validate` with a placeholder `.env`, with local Docker when
    present and otherwise with the edge's Docker in a scratch directory there (never the live
-   deployment). `shellcheck` and `yamllint` run when installed. Any FAIL blocks `deploy`.
+   deployment). `shellcheck` and `yamllint` run when installed. Compose and Caddy validation
+   are mandatory: an unreachable edge or failed staging is a FAIL when local Docker is
+   unavailable. Any FAIL blocks `deploy`.
 4. Put the project under version control if it is not (`git init`) and commit the rendered files.
    The rendered `.gitignore` excludes `.env`, backups and agent working directories.
 5. Optional: `/rpa-gen-rules` adds agent rules for Cursor, Claude Code and Codex on top of the

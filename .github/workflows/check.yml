@@ -1,0 +1,36 @@
+name: Check templates and lifecycle scripts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract Caddy from the production image
+        run: |
+          docker create --name caddy-check caddy:2
+          docker cp caddy-check:/usr/bin/caddy "$RUNNER_TEMP/caddy"
+          docker rm caddy-check
+      - name: Run local regression checks
+        run: CADDY_BIN="$RUNNER_TEMP/caddy" python3 tests/regression.py
+      - name: Render and validate a fresh site
+        run: |
+          mkdir "$RUNNER_TEMP/site"
+          python3 scripts/manifest.py -f "$RUNNER_TEMP/site/caddy-coddy.yml" init \
+            --public-host review.example.com --edge-ssh unused-test-host \
+            --coddy-backend 127.0.0.1:18080
+          python3 scripts/render.py "$RUNNER_TEMP/site"
+          python3 scripts/render.py --check "$RUNNER_TEMP/site"
+          bash scripts/validate.sh "$RUNNER_TEMP/site"
+      - name: Check agent scripts
+        run: |
+          for script in scripts/*.sh; do bash -n "$script"; done
+          python3 -m py_compile scripts/*.py tests/regression.py
+          git diff --check

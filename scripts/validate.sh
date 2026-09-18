@@ -22,6 +22,7 @@ run() { # run <label> <command...>
   fi
 }
 skip() { printf 'SKIP  %s\n' "$1"; skipped=$((skipped + 1)); }
+fail() { printf 'FAIL  %s\n' "$1"; failed=$((failed + 1)); }
 # Project files only: not the agent checkout, git internals or agent folders.
 project_files() { find . \( -path ./.git -o -path ./tools -o -path ./.coddy -o -path ./memory -o -path ./.relay \) -prune -o -type f -name "$1" -print0 | sort -z; }
 
@@ -68,10 +69,10 @@ if [ -f docker-compose.yml ] && [ -f Caddyfile ] && [ -f .env.example ]; then
       run "caddy validate (on $CC_EDGE_NAME)" edge "sudo -n docker run --rm -v '$remote/Caddyfile:/etc/caddy/Caddyfile:ro' -v '$remote/.env:/etc/caddy/env:ro' caddy:2 $caddy_cmd"
       edge "rm -rf '$remote'" || true
     else
-      skip "compose/caddy: could not stage the files on the edge"
+      fail "compose/caddy: could not stage the files on the edge"
     fi
   else
-    skip "compose/caddy: no docker here and the edge is unreachable"
+    fail "compose/caddy: no docker here and the edge is unreachable"
   fi
 fi
 

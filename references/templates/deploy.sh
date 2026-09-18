@@ -26,8 +26,10 @@ THEME_CHANGED=0
 if grep -q 'keycloak/themes/' <<<"$changed"; then THEME_CHANGED=1; fi
 PROXY_CHANGED=0
 if grep -q 'oauth2-proxy/' <<<"$changed"; then PROXY_CHANGED=1; fi
+CADDY_CHANGED=0
+if grep -qE '^[^ ]+ Caddyfile$' <<<"$changed"; then CADDY_CHANGED=1; fi
 
-ssh "$TARGET_HOST" TARGET_DIR="$TARGET_DIR" THEME_CHANGED="$THEME_CHANGED" PROXY_CHANGED="$PROXY_CHANGED" 'bash -s' <<'REMOTE'
+ssh "$TARGET_HOST" "$(printf 'TARGET_DIR=%q THEME_CHANGED=%q PROXY_CHANGED=%q CADDY_CHANGED=%q bash -s' "$TARGET_DIR" "$THEME_CHANGED" "$PROXY_CHANGED" "$CADDY_CHANGED")" <<'REMOTE'
 set -euo pipefail
 cd "$TARGET_DIR"
 if [ ! -f .env ]; then
@@ -36,6 +38,13 @@ if [ ! -f .env ]; then
 fi
 sudo docker compose pull -q
 sudo docker compose up -d --remove-orphans
+
+if [ "$CADDY_CHANGED" = 1 ]; then
+  # rsync replaces the file's inode. Recreate the container so its single-file
+  # bind mount sees the new Caddyfile and Caddy loads the updated routes.
+  echo "Caddyfile changed: recreating caddy"
+  sudo docker compose up -d --no-deps --force-recreate caddy
+fi
 
 if [ "$PROXY_CHANGED" = 1 ]; then
   echo "oauth2-proxy config changed: restarting oauth2-proxy"
