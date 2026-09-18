@@ -8,6 +8,43 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.0.4] - 2026-09-18
+
+Six review findings on first installs, redeploys and verification, from the
+pull request "Fix bootstrap credentials, proxy sessions and deployment
+verification", rebased onto 1.0.3.
+
+### Fixed
+
+- Caddyfile: the auth check is an expanded `reverse_proxy` instead of
+  `forward_auth`. It copies every `Set-Cookie` of a successful `/oauth2/auth`
+  answer to the browser (refreshed and split session cookies, cookie deletion
+  on the login redirect), and strips caller-supplied `X-Auth-Request-*`
+  headers before setting the ones oauth2-proxy returned, so a missing claim
+  (a service account's email) can no longer be spoofed by the caller. Token
+  isolation, request bodies and the cookie-only admin-console check are kept.
+- Realm import: `coddy-web` and `coddy-service` are imported disabled and
+  without a placeholder secret; `bootstrap.sh` installs the real secret and
+  enables the client in one update, so a fresh site cannot issue tokens with a
+  shared placeholder before bootstrap ran.
+- `deploy.sh`: a changed `Caddyfile` recreates the Caddy container. rsync
+  replaces the file's inode and the single-file bind mount kept serving the
+  old routes; active connections are interrupted briefly.
+- `tests/smoke.sh`: `--record` writes the manifest only after successful
+  staging, a zero ssh exit status, the remote `SMOKE_COMPLETE` marker and no
+  failed checks; `smoke-remote.sh` exits non-zero on any failure.
+- `validate.sh`: compose and Caddy validation are mandatory; no local Docker
+  and no reachable edge is a FAIL, not a SKIP.
+- `add-service.sh` refuses `--rotate coddy-service`: bootstrap owns that
+  secret (`CODDY_SERVICE_CLIENT_SECRET` in `.env`).
+
+### Added
+
+- `tests/regression.py`: 19 checks with command stubs (deploy, bootstrap,
+  smoke, validate, add-service) and, with `CADDY_BIN`, the rendered proxy
+  against loopback HTTP stubs. Part of `make check` and of CI, which takes the
+  Caddy binary from the `caddy:2` image.
+
 ## [1.0.3] - 2026-09-18
 
 Tested well on Coddy 1.1.49 with the neuraldeep.ru models **qwen3.8-27b** and

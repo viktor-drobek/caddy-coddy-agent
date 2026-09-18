@@ -13,15 +13,16 @@ JSON := references/templates/keycloak/*.json references/templates/keycloak/impor
 
 .PHONY: check render-example bump release clean
 
-check: ## syntax, JSON, version consistency, no addresses in templates, fresh render of the example
+check: ## syntax, JSON, version consistency, no addresses in templates, fresh render of the example, regression tests
 	bash -n $(SCRIPTS)
-	python3 -m py_compile scripts/*.py && rm -rf scripts/__pycache__
+	python3 -m py_compile scripts/*.py tests/*.py && rm -rf scripts/__pycache__ tests/__pycache__
 	for f in $(JSON); do python3 -m json.tool "$$f" >/dev/null; done
 	test "$$(sed -n 's/^version:[[:space:]]*//p' SKILL.md)" = "$(VERSION)" || { echo "SKILL.md version differs from manifest.yml ($(VERSION))"; exit 1; }
 	grep -q '^## \[$(VERSION)\]' CHANGELOG.md || { echo "CHANGELOG.md has no section for $(VERSION)"; exit 1; }
 	@# Templates are generic: no addresses other than loopback, every host comes from the manifest.
 	! grep -rnE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' references/templates | grep -vE '127\.0\.0\.1|0\.0\.0\.0' || { echo "address literal in templates"; exit 1; }
 	$(MAKE) --no-print-directory render-example
+	python3 tests/regression.py 2>&1 | tail -3
 	@echo "check: OK ($(VERSION))"
 
 render-example: ## render examples/caddy-coddy.yml into build/example and check the result
