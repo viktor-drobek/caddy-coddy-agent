@@ -12,7 +12,9 @@ the `Release` workflow; install a specific one with
 
 Six review findings on first installs, redeploys and verification, from the
 pull request "Fix bootstrap credentials, proxy sessions and deployment
-verification", rebased onto 1.0.3.
+verification", rebased onto 1.0.3. Proven on the reference deployment: fresh
+redeploy (Caddy recreated, clients enabled by bootstrap) and the full smoke test,
+32 of 32 checks, against Coddy 1.1.53.
 
 ### Fixed
 

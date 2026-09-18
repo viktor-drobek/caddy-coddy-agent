@@ -3,7 +3,7 @@ name: caddy-coddy
 version: 1.0.4
 description: Coddy skill that plans, builds, deploys, verifies and operates a Caddy + Keycloak + oauth2-proxy edge for a Coddy server.
 # Coddy version the templates and tests/smoke.sh were last proven against on a full plan-to-verify run.
-tested_coddy_version: 1.1.49
+tested_coddy_version: 1.1.53
 tested_at: 2026-09-18
 # Models the skill was dry-run with (fresh sessions, plan mode) and followed correctly.
 tested_models: neuraldeep.ru qwen3.8-27b, neuraldeep.ru kimi-k2.6
