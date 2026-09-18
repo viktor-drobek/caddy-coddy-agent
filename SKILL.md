@@ -31,7 +31,8 @@ sign-in screen is never shown behind the proxy.
 ## Phases
 
 The first word after `/caddy-coddy` picks the phase. Without one, read `caddy-coddy.yml` in the
-project directory (if it exists) and tell the user which phase comes next. Never run a later phase
+project directory with the file-read tool (no shell needed; if the file is missing, start with
+`plan`) and tell the user which phase comes next. Never run a later phase
 before the earlier ones passed.
 
 | Phase | What happens | Read first | Run |

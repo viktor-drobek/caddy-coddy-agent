@@ -5,7 +5,7 @@ name: Release
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags: ['v[0-9]*.[0-9]*.[0-9]*']   # glob, not regex: v1.0.3
 
 permissions:
   contents: write
@@ -32,7 +32,8 @@ jobs:
           awk -v v="$v" '/^## \[/{p=($0 ~ "^## \\[" v "\\]")} p' CHANGELOG.md | tail -n +2 > notes.md
           tested=$(sed -n 's/^tested_coddy_version:[[:space:]]*//p' manifest.yml)
           {
-            printf '\nTemplates last proven against Coddy %s.\n\n' "$tested"
+            models=$(sed -n 's/^tested_models:[[:space:]]*//p' manifest.yml)
+            printf '\nTemplates last proven against Coddy %s; dry-run tested with: %s.\n\n' "$tested" "$models"
             printf 'Install: `coddy skills add viktor-drobek/caddy-coddy-agent@%s` then `coddy skills sync`.\n' "$GITHUB_REF_NAME"
           } >> notes.md
           cat notes.md

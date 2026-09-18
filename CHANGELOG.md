@@ -10,6 +10,12 @@ the `Release` workflow; install a specific one with
 
 ## [1.0.3] - 2026-09-18
 
+Tested well on Coddy 1.1.49 with the neuraldeep.ru models **qwen3.8-27b** and
+**kimi-k2.6**: fresh sessions, plan mode, the skill's plan questions asked
+verbatim with the right defaults and nothing written; the existing-site state
+reported correctly from `caddy-coddy.yml`. Recorded as `tested_models` in
+`manifest.yml`.
+
 ### Added
 
 - Versioning: `manifest.yml` is the single source of the version, mirrored in
@@ -21,6 +27,11 @@ the `Release` workflow; install a specific one with
 - Release workflow (`.github/workflows/release.yml`): a `v*` tag whose version
   matches `manifest.yml` and has a changelog section becomes a GitHub release
   with those notes and a `caddy-coddy-<version>.tar.gz` archive.
+
+### Changed
+
+- `SKILL.md`: without a phase word, read `caddy-coddy.yml` with the file-read
+  tool (a model whose shell was denied asked the plan questions instead).
 
 ## [1.0.2] - 2026-09-18
 
