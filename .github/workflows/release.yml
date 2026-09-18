@@ -1,0 +1,46 @@
+# Release of the caddy-coddy agent: pushing a tag vX.Y.Z publishes a GitHub
+# release whose notes are that version's CHANGELOG.md section, with a source
+# archive attached. The tag must match manifest.yml and have a changelog entry.
+name: Release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches manifest.yml and CHANGELOG.md
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          manifest=$(sed -n 's/^version:[[:space:]]*//p' manifest.yml)
+          test "$manifest" = "$v" || { echo "tag $GITHUB_REF_NAME but manifest.yml says $manifest"; exit 1; }
+          grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $v"; exit 1; }
+
+      - name: make check
+        run: make check
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          awk -v v="$v" '/^## \[/{p=($0 ~ "^## \\[" v "\\]")} p' CHANGELOG.md | tail -n +2 > notes.md
+          tested=$(sed -n 's/^tested_coddy_version:[[:space:]]*//p' manifest.yml)
+          {
+            printf '\nTemplates last proven against Coddy %s.\n\n' "$tested"
+            printf 'Install: `coddy skills add viktor-drobek/caddy-coddy-agent@%s` then `coddy skills sync`.\n' "$GITHUB_REF_NAME"
+          } >> notes.md
+          cat notes.md
+
+      - name: Source archive
+        run: git archive --format=tar.gz --prefix="caddy-coddy-${GITHUB_REF_NAME#v}/" -o "caddy-coddy-${GITHUB_REF_NAME#v}.tar.gz" "$GITHUB_REF_NAME"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "caddy-coddy-${GITHUB_REF_NAME#v}.tar.gz" --title "caddy-coddy agent ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag

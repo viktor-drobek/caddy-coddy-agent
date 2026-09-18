@@ -1,0 +1,56 @@
+# Changelog
+
+All notable changes to the caddy-coddy agent. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[Semantic Versioning](https://semver.org/): a new major version means rendered
+projects need manual changes, minor adds phases, tools or manifest keys, patch
+fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
+the `Release` workflow; install a specific one with
+`coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
+
+## [1.0.3] - 2026-09-18
+
+### Added
+
+- Versioning: `manifest.yml` is the single source of the version, mirrored in
+  the `SKILL.md` frontmatter and checked by `make check`; `make bump`,
+  `make release`, this changelog.
+- CI (`.github/workflows/ci.yml`): on every push and pull request runs
+  `make check`, shellcheck, and `docker compose config` plus `caddy validate`
+  on a fresh render of the example manifest.
+- Release workflow (`.github/workflows/release.yml`): a `v*` tag whose version
+  matches `manifest.yml` and has a changelog section becomes a GitHub release
+  with those notes and a `caddy-coddy-<version>.tar.gz` archive.
+
+## [1.0.2] - 2026-09-18
+
+### Changed
+
+- `SKILL.md` carries the six plan questions with their defaults, so a model
+  without shell or file access (plan mode, a dry run, denied permissions) asks
+  the right questions and stops after the architecture summary.
+
+## [1.0.1] - 2026-09-18
+
+### Fixed
+
+- `deploy.sh` template: the theme branch's `docker compose exec` attached stdin
+  and swallowed the rest of the remote script on a first deploy, so the
+  Keycloak bootstrap never ran. Redirected from `/dev/null`.
+- `realm-coddy.json` template: the explicit `requiredActions` list suppressed
+  Keycloak's default required actions on import, so `UPDATE_PASSWORD` was
+  missing and temporary passwords were never forced to change. The list is
+  gone; `bootstrap.sh` registers the default actions on realms that lack them.
+
+## [1.0.0] - 2026-09-18
+
+### Added
+
+- The skill `/caddy-coddy` with the phases plan, build, validate, deploy,
+  verify and ops; one reference page per phase and the security contract.
+- Templates of the whole stack (Caddy, Keycloak, oauth2-proxy, deploy and
+  operator tools, end-to-end smoke test) rendered from a flat site manifest.
+- Tools: `manifest.py`, `render.py`, `preflight.sh`, `validate.sh`,
+  `init-env.sh`, `deploy.sh`, `verify.sh`, `health.sh`; new operator tools
+  `remove-user.sh`, `list-users.sh`, `add-service.sh`.
+- `manifest.yml` with the Coddy version the templates were last proven against.

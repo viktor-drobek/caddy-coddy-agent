@@ -1,0 +1,28 @@
+# CI for the caddy-coddy agent: every push to main and every pull request.
+# `make check` covers syntax, JSON, version consistency and a fresh render of
+# the example manifest; the last step validates that render with the real
+# tools (docker compose config, caddy validate) the way validate.sh does.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -q && sudo apt-get install -y -q shellcheck
+
+      - name: make check
+        run: make check
+
+      - name: shellcheck
+        run: shellcheck -S error scripts/*.sh references/templates/*.sh references/templates/tests/*.sh references/templates/keycloak/*.sh
+
+      - name: docker compose config and caddy validate on the rendered example
+        run: bash scripts/validate.sh build/example

@@ -78,6 +78,21 @@ Coddy release. The site manifest `caddy-coddy.yml` records the hosts and the Cod
 last passing smoke test; `manifest.yml` here records the Coddy version the templates were last
 proven against.
 
+## Versioning and releases
+
+The version lives in `manifest.yml` and is mirrored in the `SKILL.md` frontmatter (Coddy shows it in
+`coddy skills list` and uses it to detect updates). Releases are `vX.Y.Z` tags; the `Release`
+workflow turns a tag into a GitHub release with that version's `CHANGELOG.md` section as notes and
+a source archive. CI runs `make check`, shellcheck and a real `docker compose config` plus
+`caddy validate` on a fresh render of the example manifest for every push and pull request.
+
+```bash
+make check                  # what CI runs
+make bump VERSION=1.1.0     # manifest.yml + SKILL.md, opens a CHANGELOG.md section
+make release                # tags v<version>; then: git push origin main v<version>
+coddy skills add viktor-drobek/caddy-coddy-agent@v1.0.3   # pin a release
+```
+
 ## Security contract
 
 Seven invariants the templates encode and the skill refuses to drift from, spelled out in
