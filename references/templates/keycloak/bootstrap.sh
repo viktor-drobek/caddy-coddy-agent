@@ -34,6 +34,18 @@ set_client_secret() {
 kc update authentication/required-actions/VERIFY_PROFILE -r "$REALM" -s enabled=false
 echo "bootstrap: VERIFY_PROFILE required action disabled"
 
+# A realm imported from a file with an explicit requiredActions list lacks
+# Keycloak's default actions; without UPDATE_PASSWORD a temporary password is
+# never forced to change. Register the defaults when they are missing.
+registered=$(kc get authentication/required-actions -r "$REALM" --fields alias --format csv --noquotes)
+for action in "UPDATE_PASSWORD=Update Password" "UPDATE_PROFILE=Update Profile" "CONFIGURE_TOTP=Configure OTP" "VERIFY_EMAIL=Verify Email"; do
+  alias=${action%%=*}
+  if ! grep -qx "$alias" <<<"$registered"; then
+    kc create authentication/register-required-action -r "$REALM" -s providerId="$alias" -s name="${action#*=}"
+    echo "bootstrap: registered required action $alias"
+  fi
+done
+
 # Branded login theme (keycloak/themes/coddy, mounted at /opt/keycloak/themes).
 kc update "realms/$REALM" -s loginTheme=coddy -s accessCodeLifespanLogin=3600
 echo "bootstrap: loginTheme=coddy, login timeout 1h"

@@ -47,7 +47,9 @@ if [ "$THEME_CHANGED" = 1 ]; then
   # restart, served to clients that accept gzip, i.e. through Caddy) and the
   # theme itself in memory: drop both so the new theme is what gets served.
   echo "theme changed: clearing Keycloak gzip cache and restarting keycloak"
-  sudo docker compose exec -T keycloak rm -rf /opt/keycloak/data/tmp/kc-gzip-cache || true
+  # </dev/null: `compose exec` attaches stdin and would otherwise swallow the rest
+  # of this script, which arrives over stdin (bash -s).
+  sudo docker compose exec -T keycloak rm -rf /opt/keycloak/data/tmp/kc-gzip-cache </dev/null || true
   sudo docker compose restart keycloak
 fi
 

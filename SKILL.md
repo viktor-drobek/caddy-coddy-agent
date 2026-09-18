@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.0.0
+version: 1.0.1
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the

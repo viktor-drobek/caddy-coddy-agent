@@ -19,17 +19,6 @@
   "accessCodeLifespanLogin": 3600,
   "ssoSessionIdleTimeout": 43200,
   "ssoSessionMaxLifespan": 604800,
-  "requiredActions": [
-    {
-      "alias": "VERIFY_PROFILE",
-      "name": "Verify Profile",
-      "providerId": "VERIFY_PROFILE",
-      "enabled": false,
-      "defaultAction": false,
-      "priority": 90,
-      "config": {}
-    }
-  ],
   "clients": [
     {
       "clientId": "coddy-web",
