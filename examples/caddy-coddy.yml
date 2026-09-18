@@ -1,0 +1,29 @@
+# caddy-coddy site manifest: where this stack runs and what it was verified against.
+# Written by `/caddy-coddy plan` (manifest.py init); read by build, deploy and verify.
+# Flat `key: value` lines only, so shell and Python read it without a YAML library.
+# Version of the caddy-coddy agent that wrote this file.
+agent_version: 1.0.0
+# Public DNS name of the site; its A/AAAA record points at the edge, or at a NAT that forwards 80/443 to it.
+public_host: meet.example.com
+# Public origin without a path; the OIDC issuer is <public_url>/auth/realms/coddy.
+public_url: https://meet.example.com
+# Short name of the edge host, used in comments and documentation.
+edge_name: edge
+# ssh target of the edge host ([user@]host or an ssh config alias); needs docker compose and passwordless sudo.
+edge_ssh: ops@edge.example.com
+# Directory on the edge that receives the project (rsync target and docker compose project).
+edge_dir: /opt/caddy-coddy
+# Short name of the host running coddy serve, used in comments and documentation.
+coddy_host_name: workstation
+# coddy serve address as seen from the edge (host:port; 127.0.0.1:PORT when both share one host).
+coddy_backend: 10.0.0.5:12345
+# coddy serve URL as seen from the machine running the tools (init-env.sh, sync-coddy-token.sh).
+coddy_local_url: http://127.0.0.1:12345
+# First user of realm coddy, created with a temporary password (empty: none).
+initial_user: alice
+# Comma-separated rendered paths that build creates once and never overwrites.
+keep:
+# Coddy version the deployed stack last passed tests/smoke.sh against (written by verify --record).
+coddy_version:
+# UTC time of that pass (written by verify --record).
+verified_at:

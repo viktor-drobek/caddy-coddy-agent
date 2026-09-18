@@ -1,0 +1,125 @@
+# Caddy edge for Coddy at @@PUBLIC_URL@@ — Keycloak IAM + oauth2-proxy.
+#
+# Runs on @@EDGE_NAME@@ (@@EDGE_HOST@@, host network). Coddy runs on @@CODDY_HOST_NAME@@
+# (@@CODDY_BACKEND@@). Keycloak and oauth2-proxy run next to Caddy on
+# @@EDGE_NAME@@ and are only reachable through it (loopback ports).
+#
+#   /auth/*    -> Keycloak        (login pages, OIDC endpoints; admin console
+#                                  and master realm only behind a Coddy login)
+#   /oauth2/*  -> oauth2-proxy    (OIDC client: /oauth2/start, /oauth2/callback,
+#                                  /oauth2/sign_out, /oauth2/auth)
+#   /*         -> forward_auth oauth2-proxy, then reverse_proxy Coddy with the
+#                 Authorization header replaced by Coddy's own API token.
+#
+# Two ways in:
+#   1. Browser: page load without a session cookie -> 302 /oauth2/start ->
+#      Keycloak username / password form -> /oauth2/callback -> oauth2-proxy
+#      session cookie -> Coddy web UI. Non-page requests (XHR/SSE) get 401. Coddy sees "Authorization: Bearer <CODDY_API_TOKEN>", so
+#      its own sign-in screen is skipped (/coddy/auth/me reports authenticated).
+#   2. Service / CLI: "Authorization: Bearer <Keycloak access token>", obtained
+#      from Keycloak with OAuth2 (client_credentials for services, password
+#      grant on the public client coddy-cli for people). oauth2-proxy verifies the
+#      JWT (issuer, signature, audience "coddy-web"); Caddy then swaps the
+#      header for CODDY_API_TOKEN. Clients never learn Coddy's token and Coddy
+#      never sees Keycloak tokens.
+#
+# All addresses and secrets come from .env (see .env.example).
+
+(coddy_upstream) {
+	reverse_proxy {env.CODDY_BACKEND} {
+		# Coddy's static API token (httpserver.auth_token in @@CODDY_HOST_NAME@@:~/.coddy/config.yaml).
+		header_up Authorization "Bearer {env.CODDY_API_TOKEN}"
+		# Who is calling, as seen by Keycloak (from oauth2-proxy's X-Auth-Request-*).
+		header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
+		# Coddy streams (SSE on /coddy/events and composer-stream): never buffer.
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
+@@PUBLIC_URL@@ {
+	# --- Keycloak (KC_HTTP_RELATIVE_PATH=/auth, KC_PROXY_HEADERS=xforwarded) ---
+	handle /auth/* {
+		# Admin console, admin REST API and the master realm are not exposed
+		# anonymously: the browser must already hold a Coddy (realm "coddy")
+		# session cookie. Keycloak's own admin credentials still apply on top.
+		@kc_admin path /auth/admin/* /auth/realms/master/*
+		handle @kc_admin {
+			forward_auth {env.OAUTH2_PROXY_BACKEND} {
+				uri /oauth2/auth
+				# The console calls the admin API with its own master-realm
+				# bearer token; check the session cookie only.
+				header_up -Authorization
+
+				@unauthenticated status 401
+				handle_response @unauthenticated {
+					redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+				}
+			}
+			reverse_proxy {env.KEYCLOAK_BACKEND}
+		}
+
+		# Realm "coddy": login pages, OIDC endpoints, account console, theme assets.
+		handle {
+			reverse_proxy {env.KEYCLOAK_BACKEND}
+		}
+	}
+
+	# --- oauth2-proxy's own endpoints ---
+	handle /oauth2/* {
+		reverse_proxy {env.OAUTH2_PROXY_BACKEND}
+	}
+
+	# --- Services: Keycloak bearer token. Invalid/expired -> 401 from oauth2-proxy. ---
+	@bearer header Authorization Bearer*
+	handle @bearer {
+		forward_auth {env.OAUTH2_PROXY_BACKEND} {
+			uri /oauth2/auth
+			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+		}
+		import coddy_upstream
+	}
+
+	# --- Browser page loads (Accept: text/html): session cookie, otherwise go
+	# log in at Keycloak. Only navigations are redirected: if the UI's parallel
+	# XHR/SSE calls were redirected too, each /oauth2/start would overwrite the
+	# login state cookie and the callback would fail with a PKCE mismatch. ---
+	@page header Accept *text/html*
+	handle @page {
+		forward_auth {env.OAUTH2_PROXY_BACKEND} {
+			uri /oauth2/auth
+			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+
+			@unauthenticated status 401
+			handle_response @unauthenticated {
+				redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+			}
+		}
+		import coddy_upstream
+	}
+
+	# --- Everything else from a browser (fetch/XHR/EventSource): cookie or 401. ---
+	handle {
+		forward_auth {env.OAUTH2_PROXY_BACKEND} {
+			uri /oauth2/auth
+			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+		}
+		import coddy_upstream
+	}
+
+	# Security headers.
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# Access log to stdout.
+	log {
+		output stdout
+		format json
+	}
+}

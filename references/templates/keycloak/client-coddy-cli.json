@@ -1,0 +1,29 @@
+{
+  "clientId": "coddy-cli",
+  "name": "Coddy CLI / API access (people)",
+  "description": "Public client for scripts and the Coddy UI remote: password grant -> 7-day access token accepted by Caddy at @@PUBLIC_HOST@@.",
+  "protocol": "openid-connect",
+  "enabled": true,
+  "publicClient": true,
+  "standardFlowEnabled": false,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": true,
+  "serviceAccountsEnabled": false,
+  "attributes": {
+    "access.token.lifespan": "604800"
+  },
+  "protocolMappers": [
+    {
+      "name": "audience coddy-web",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "consentRequired": false,
+      "config": {
+        "included.client.audience": "coddy-web",
+        "id.token.claim": "false",
+        "access.token.claim": "true",
+        "introspection.token.claim": "true"
+      }
+    }
+  ]
+}

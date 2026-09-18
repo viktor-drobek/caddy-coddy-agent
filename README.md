@@ -1,62 +1,86 @@
-# Caddy Coddy Agent
+# caddy-coddy agent
 
-Coddy agent for managing the `caddy-coddy` infrastructure stack on **superset**.
-
-This repository is designed as a **git submodule** inside the main `caddy-coddy` repo, under `tools/caddy-coddy-agent`.
-
-## What it does
-
-- **Validate** — `scripts/validate.sh` checks all configs before deploy (bash -n, jq, caddy validate, docker compose config)
-- **Deploy** — `scripts/deploy.sh` wraps `./deploy.sh` from the main repo with pre-flight checks
-- **Smoke test** — `scripts/smoke.sh` runs full E2E against `https://meet.2050.su`
-- **User management** — `scripts/add-user.py` and `scripts/remove-user.py` for Keycloak realm `coddy`
-- **Token sync** — `scripts/sync-token.py` syncs `httpserver.auth_token` from ml to superset
-- **Health** — `workflows/health-check.yml` defines automated health probes
-
-## Structure
+A [Coddy](https://coddy.dev) skill, `/caddy-coddy`, that puts a Coddy server behind a public HTTPS
+address with real logins: **Caddy** (TLS, routing) + **Keycloak** (users, realm `coddy`, login
+page) + **oauth2-proxy** (OIDC client, session cookie, bearer-token check), deployed with Docker
+Compose to a host you choose, over ssh. Browsers log in at Keycloak; scripts and services use
+Keycloak tokens; Coddy's own API token never leaves the proxy.
 
 ```
-.
-├── README.md                 # This file
-├── agent.yml                 # Coddy agent configuration (skills, workflows)
-├── scripts/                  # Bash + Python tools
-│   ├── validate.sh           # Pre-deploy validation suite
-│   ├── deploy.sh             # Deploy with safety checks
-│   ├── smoke.sh              # E2E smoke tests
-│   ├── add-user.py           # Create Keycloak user
-│   ├── remove-user.py        # Remove Keycloak user
-│   └── sync-token.py         # Sync Coddy API token
-├── skills/                   # Coddy agent skill definitions
-│   ├── rap-init.md           # RPA initialization skill
-│   └── rpa-gen-rules.md      # Rule generation skill
-└── workflows/                # Workflow definitions
-    ├── deploy.yml
-    └── health-check.yml
+internet ── https://<public_host> ──► Caddy :443 (edge host)
+                                         ├── /auth/*    → Keycloak
+                                         ├── /oauth2/*  → oauth2-proxy
+                                         └── /*  forward_auth → oauth2-proxy → reverse_proxy → coddy serve
+                                                Authorization := "Bearer <CODDY_API_TOKEN>"
 ```
 
-## Usage (as submodule)
+## Install
+
+Any of these makes `/caddy-coddy` available in Coddy:
 
 ```bash
-# From the main caddy-coddy repo
-cd tools/caddy-coddy-agent
-
-# Validate everything
-./scripts/validate.sh ../../
-
-# Deploy
-cd ../..
-./tools/caddy-coddy-agent/scripts/deploy.sh
-
-# Add a user
-python3 ./tools/caddy-coddy-agent/scripts/add-user.py alice alice@example.com
-
-# Sync token from ml
-python3 ./tools/caddy-coddy-agent/scripts/sync-token.py
+coddy skills add viktor-drobek/caddy-coddy-agent        # into ~/.coddy/skills/caddy-coddy
+npx skills add viktor-drobek/caddy-coddy-agent          # into ~/.agents/skills (skills.sh CLI)
+git clone https://github.com/viktor-drobek/caddy-coddy-agent ~/.coddy/skills/caddy-coddy
 ```
 
-## Design Principles
+Or vendor it into a project as a git submodule and link it into the project's skills folder, which
+Coddy reads with the highest priority:
 
-1. **Fail fast** — validation runs before any deploy
-2. **Idempotent** — every script safe to run multiple times
-3. **No secrets in repo** — reads from the main repo's `.env` on superset
-4. **Layered** — validation → deploy → smoke test, in that order
+```bash
+git submodule add https://github.com/viktor-drobek/caddy-coddy-agent tools/caddy-coddy-agent
+mkdir -p .coddy/skills && ln -s ../../tools/caddy-coddy-agent .coddy/skills/caddy-coddy
+```
+
+Requirements on the machine running Coddy: `bash`, `ssh`, `rsync`, `curl`, `python3`, `openssl`;
+optional `jq`, `docker` (local validation) and a Linux `coddy` binary (the CLI smoke check). On the
+edge host: Linux, Docker with the compose plugin, ssh key login, passwordless sudo, ports 80 and
+443 reachable from the internet. `coddy serve` must have `httpserver.auth_token` set.
+
+## Lifecycle
+
+| Command | Phase |
+|---|---|
+| `/caddy-coddy plan` | Questions, architecture agreed with you, `caddy-coddy.yml` written, preflight (ssh, sudo, docker, DNS, ports, Coddy reachability) |
+| `/caddy-coddy build` | Templates rendered into the project directory; `bash -n`, JSON, `docker compose config`, `caddy validate` |
+| `/caddy-coddy deploy` | First run creates `.env` on the edge with generated secrets; rsync, `docker compose up -d`, Keycloak bootstrap, health probes |
+| `/caddy-coddy verify` | End-to-end smoke test of every access path (anonymous, browser login, service token, CLI token, `coddy cli --remote`); `--record` stores the Coddy version in the manifest |
+| `/caddy-coddy ops` | Users, passwords, tokens, service clients, Coddy token rotation, logs, theme |
+
+The scripts behind the phases work without Coddy too:
+
+```bash
+CC=~/.coddy/skills/caddy-coddy
+python3 "$CC/scripts/manifest.py" init --public-host meet.example.com --edge-ssh ops@edge.example.com \
+        --coddy-backend 10.0.0.5:12345 --initial-user alice
+bash    "$CC/scripts/preflight.sh"
+python3 "$CC/scripts/render.py" --check --diff && python3 "$CC/scripts/render.py"
+bash    "$CC/scripts/validate.sh"
+bash    "$CC/scripts/deploy.sh"
+bash    "$CC/scripts/verify.sh" --record
+```
+
+## Layout
+
+```
+SKILL.md                  the skill: phases, ground rules, report format
+manifest.yml              agent manifest: version, Coddy version the templates were last proven against
+scripts/                  lifecycle tooling: manifest.py, render.py, preflight, validate, init-env, deploy, verify, health
+references/               one page per phase, the security contract, and templates/
+references/templates/     the parameterised stack: Caddyfile, docker-compose.yml, .env.example, keycloak/,
+                          oauth2-proxy/, deploy.sh, user and token tools, tests/, README.md, AGENTS.md
+examples/caddy-coddy.yml  an example site manifest
+```
+
+A rendered project is self-contained: its own `README.md` documents the site with the real names in
+it, `deploy.sh` and the tools default to that site's edge, and `tests/smoke.sh` re-tests it after a
+Coddy release. The site manifest `caddy-coddy.yml` records the hosts and the Coddy version of the
+last passing smoke test; `manifest.yml` here records the Coddy version the templates were last
+proven against.
+
+## Security contract
+
+Seven invariants the templates encode and the skill refuses to drift from, spelled out in
+`references/security-contract.md`. In short: Coddy's token stays in the proxy, only page loads are
+redirected to the login, issuer and audience are verified, secrets stay out of git, users live in
+realm `coddy`, the Keycloak admin API sits behind the login, and deploys wait for Keycloak's health.

@@ -1,0 +1,12 @@
+# Real environment and its backups — never commit (matches .env at any level).
+.env
+.env.bak*
+
+# Backups made on the edge box.
+*.bak*
+
+# Agent working directories (Coddy memory, relay) and Python bytecode.
+memory/
+.relay/
+__pycache__/
+*.pyc

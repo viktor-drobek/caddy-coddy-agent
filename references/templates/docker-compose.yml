@@ -1,0 +1,139 @@
+# Caddy edge + Keycloak IAM + oauth2-proxy for Coddy (@@PUBLIC_URL@@).
+#
+# Runs on @@EDGE_NAME@@ (@@EDGE_HOST@@). Coddy itself runs on @@CODDY_HOST_NAME@@ (@@CODDY_BACKEND@@).
+# Deploy with ./deploy.sh from any checkout that can ssh to @@EDGE_NAME@@. Secrets and addresses: .env
+# (see .env.example) — compose interpolates ${VAR} from it and Caddy reads it
+# via env_file.
+#
+# Network model:
+#   - caddy: host network, binds :443 (and :80 for ACME redirects).
+#   - keycloak, keycloak-db, oauth2-proxy: private bridge network. Only
+#     keycloak :8080 and oauth2-proxy :4180 are published, on 127.0.0.1, so
+#     Caddy (host network) can reach them and nothing else can.
+#   - oauth2-proxy talks to Keycloak directly (http://keycloak:8080) for the
+#     token/JWKS/userinfo back-channel; only the browser-facing login URL is
+#     public. Tokens still carry the public issuer @@PUBLIC_URL@@/auth/realms/coddy
+#     because KC_HOSTNAME is fixed.
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: caddy-coddy
+    restart: unless-stopped
+    env_file: .env
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "443"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD:?KC_DB_PASSWORD is required}
+    volumes:
+      - keycloak_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    container_name: keycloak
+    restart: unless-stopped
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    # Production mode; realm "coddy" is imported on first start only
+    # (existing realms are left untouched — see README).
+    command: start --import-realm
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?KC_DB_PASSWORD is required}
+      # Public URL (scheme + host + path). Issuer becomes ${KC_HOSTNAME}/realms/coddy.
+      KC_HOSTNAME: ${KC_HOSTNAME:-@@PUBLIC_URL@@/auth}
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Plain HTTP behind Caddy, which terminates TLS and sets X-Forwarded-*.
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      # /auth/health/* on the management port 9000 (not published).
+      KC_HEALTH_ENABLED: "true"
+      # Browser cache for theme assets (default 30 days makes theme edits invisible).
+      KC_SPI_THEME_STATIC_MAX_AGE: "3600"
+      # Initial admin for the master realm (created on first start only).
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:?KC_ADMIN_PASSWORD is required}
+      # Consumed by keycloak/bootstrap.sh (client secrets + first user).
+      CODDY_WEB_CLIENT_SECRET: ${CODDY_WEB_CLIENT_SECRET:?CODDY_WEB_CLIENT_SECRET is required}
+      CODDY_SERVICE_CLIENT_SECRET: ${CODDY_SERVICE_CLIENT_SECRET:?CODDY_SERVICE_CLIENT_SECRET is required}
+      KC_INITIAL_USER: ${KC_INITIAL_USER:-}
+      KC_INITIAL_USER_PASSWORD: ${KC_INITIAL_USER_PASSWORD:-}
+      KC_INITIAL_USER_EMAIL: ${KC_INITIAL_USER_EMAIL:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      # Directory mount (not a single file) so edits/rsync replacements are visible.
+      - ./keycloak/import:/opt/keycloak/data/import:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
+      # bootstrap.sh reads client-coddy-cli.json from here.
+      - ./keycloak:/opt/keycloak/coddy:ro
+    healthcheck:
+      # The image has no curl/wget; use bash's /dev/tcp against the management port.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /auth/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4-alpine
+    container_name: oauth2-proxy
+    restart: unless-stopped
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    command: ["--config=/etc/oauth2-proxy/oauth2-proxy.toml"]
+    environment:
+      OAUTH2_PROXY_CLIENT_SECRET: ${CODDY_WEB_CLIENT_SECRET:?CODDY_WEB_CLIENT_SECRET is required}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?OAUTH2_PROXY_COOKIE_SECRET is required}
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${KC_HOSTNAME:-@@PUBLIC_URL@@/auth}/realms/coddy
+      OAUTH2_PROXY_LOGIN_URL: ${KC_HOSTNAME:-@@PUBLIC_URL@@/auth}/realms/coddy/protocol/openid-connect/auth
+      OAUTH2_PROXY_REDIRECT_URL: ${PUBLIC_URL:-@@PUBLIC_URL@@}/oauth2/callback
+      OAUTH2_PROXY_WHITELIST_DOMAINS: ${PUBLIC_HOST:-@@PUBLIC_HOST@@}
+    ports:
+      - "127.0.0.1:4180:4180"
+    volumes:
+      # Directory mount so a replaced file is visible; deploy.sh restarts on change.
+      - ./oauth2-proxy:/etc/oauth2-proxy:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4180/ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  caddy_data:
+  caddy_config:
+  keycloak_pgdata:

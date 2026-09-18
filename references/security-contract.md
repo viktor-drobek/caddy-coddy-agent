@@ -1,0 +1,42 @@
+# The security contract (do not drift)
+
+Seven invariants make the stack work. Each has been broken by a plausible edit before; keep them
+when changing `Caddyfile`, `oauth2-proxy/oauth2-proxy.toml`, `docker-compose.yml` or anything
+under `keycloak/`.
+
+1. **Clients never learn Coddy's token; Coddy never sees Keycloak tokens.** Caddy replaces the
+   caller's `Authorization` with `Bearer <CODDY_API_TOKEN>` (`header_up` in the `coddy_upstream`
+   block). oauth2-proxy keeps `pass_authorization_header = false` and `pass_access_token = false`.
+   Never add `copy_headers Authorization`.
+2. **Page loads versus API calls.** Only requests with `Accept: text/html` and no valid session
+   get a `302` to `/oauth2/start`. XHR, SSE and any bad or expired bearer token get a plain `401`.
+   Redirecting XHR too made parallel `/oauth2/start` calls overwrite the login-state cookie, and
+   the callback failed with a PKCE mismatch (oauth2-proxy's 500 "Proceed" page).
+3. **Issuer and audience.** oauth2-proxy verifies the issuer `<public_url>/auth/realms/coddy` and
+   the audience `coddy-web`; every machine client needs the `coddy-web` audience mapper.
+   `skip_oidc_discovery = true` with back-channel URLs at `http://keycloak:8080/...` lets
+   oauth2-proxy start before Caddy and never depend on its own public name; `KC_HOSTNAME` pins the
+   public issuer.
+4. **Secrets stay out of the repository.** `.env` is git-ignored and excluded from rsync; compose
+   fails fast on an unset required secret (`${VAR:?}`); `realm-coddy.json` carries
+   `set-by-bootstrap` placeholders and `bootstrap.sh` injects the real client secrets from `.env`.
+5. **Users live in realm `coddy`.** A user in `master` is a Keycloak admin and cannot sign in to
+   Coddy. Every tool here creates users in `coddy`.
+6. **The admin API is not public.** `/auth/admin/*` and `/auth/realms/master/*` sit behind
+   `forward_auth` (session cookie only; `header_up -Authorization` because the console sends its
+   own master-realm token). Only `/auth/realms/coddy/*` (login, token endpoint, account console,
+   theme assets) is public.
+7. **Keycloak health gating.** `deploy.sh` waits for the management-port readiness probe before
+   bootstrap, then retries bootstrap while Keycloak still imports the realm; oauth2-proxy has
+   `depends_on: condition: service_healthy`. Keep the health checks and the wait loop.
+
+Also load-bearing:
+
+- `cookie_csrf_per_request = true`, `cookie_csrf_expire = "2h"` and Keycloak's
+  `accessCodeLifespanLogin = 3600`: a slow first login, password change included, must not end in
+  "Unable to find a valid CSRF token".
+- `flush_interval -1` and zero read/write timeouts on the Coddy upstream: Coddy streams over SSE.
+- Keycloak and oauth2-proxy publish on `127.0.0.1` only; Caddy is the single public surface.
+- `VERIFY_PROFILE` is disabled so an account created with only a username is not blocked at the
+  first login.
+- Nothing here prints a secret: not the tools, not the logs, not the agent.

@@ -1,0 +1,118 @@
+{
+  "realm": "coddy",
+  "displayName": "Coddy",
+  "loginTheme": "coddy",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "rememberMe": true,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "accessTokenLifespan": 900,
+  "accessCodeLifespanLogin": 3600,
+  "ssoSessionIdleTimeout": 43200,
+  "ssoSessionMaxLifespan": 604800,
+  "requiredActions": [
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 90,
+      "config": {}
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "coddy-web",
+      "name": "Coddy web (oauth2-proxy at @@PUBLIC_HOST@@)",
+      "description": "Browser login. oauth2-proxy exchanges the code and keeps the session cookie. Secret is set from .env by keycloak/bootstrap.sh.",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "set-by-bootstrap",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "@@PUBLIC_URL@@",
+      "baseUrl": "/",
+      "redirectUris": [
+        "@@PUBLIC_URL@@/oauth2/callback"
+      ],
+      "webOrigins": [
+        "@@PUBLIC_URL@@"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "@@PUBLIC_URL@@/*"
+      }
+    },
+    {
+      "clientId": "coddy-service",
+      "name": "Coddy API service account (example)",
+      "description": "Machine client: client_credentials grant -> access token accepted by Caddy at @@PUBLIC_HOST@@. Copy this client (incl. the audience mapper) for each new service. Secret is set from .env by keycloak/bootstrap.sh.",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "set-by-bootstrap",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "protocolMappers": [
+        {
+          "name": "audience coddy-web",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "coddy-web",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "coddy-cli",
+      "name": "Coddy CLI / API access (people)",
+      "description": "Public client for scripts and the Coddy UI remote: password grant -> 7-day access token accepted by Caddy at @@PUBLIC_HOST@@.",
+      "protocol": "openid-connect",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "attributes": {
+        "access.token.lifespan": "604800"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience coddy-web",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "coddy-web",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

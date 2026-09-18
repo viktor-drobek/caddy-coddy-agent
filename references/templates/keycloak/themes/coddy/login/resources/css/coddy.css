@@ -1,0 +1,199 @@
+/* Coddy sign-in — overrides on top of keycloak.v2 / PatternFly 5. */
+:root {
+  --coddy-bg: #0b0d12;
+  --coddy-card: #141821;
+  --coddy-field: #0f1218;
+  --coddy-border: #242a37;
+  --coddy-text: #e7eaf0;
+  --coddy-muted: #8a93a6;
+  --coddy-accent: #7c6cff;
+  --coddy-accent-hover: #6b5bf0;
+  --coddy-danger: #ff6b6b;
+  --coddy-radius: 12px;
+}
+
+html, body, body#keycloak-bg {
+  min-height: 100%;
+  margin: 0;
+  color: var(--coddy-text);
+  background: var(--coddy-bg) !important;
+  background-image:
+    radial-gradient(900px 500px at 15% -10%, rgba(124, 108, 255, .22), transparent 60%),
+    radial-gradient(800px 500px at 110% 110%, rgba(56, 189, 248, .14), transparent 60%) !important;
+  background-attachment: fixed !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pf-v5-c-login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: none;
+}
+
+.pf-v5-c-login__container {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  width: 100%;
+  max-width: 400px;
+  padding: 0;
+}
+
+/* Brand */
+.pf-v5-c-login__header { padding: 0; }
+#kc-header-wrapper.pf-v5-c-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  text-transform: none;
+  color: var(--coddy-text);
+  line-height: 1;
+}
+#kc-header-wrapper.pf-v5-c-brand::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(135deg, var(--coddy-accent), #38bdf8);
+  box-shadow: 0 0 18px rgba(124, 108, 255, .6);
+}
+
+/* Card */
+.pf-v5-c-login__main {
+  width: 100%;
+  background: var(--coddy-card);
+  border: 1px solid var(--coddy-border);
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .5);
+  padding: 28px 28px 24px;
+  color: var(--coddy-text);
+  /* PatternFly draws a blue accent line on top of the card; use the theme accent. */
+  --pf-v5-c-login__main--BorderTopColor: var(--coddy-accent);
+  border-top: 3px solid var(--coddy-accent);
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header,
+.pf-v5-c-login__main-body,
+.pf-v5-c-login__main-footer {
+  padding: 0;
+  background: transparent;
+}
+.pf-v5-c-login__main-header { margin-bottom: 20px; }
+#kc-page-title.pf-v5-c-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--coddy-text);
+  margin: 0;
+}
+.pf-v5-c-login__main-footer:empty { display: none; }
+
+/* Form */
+.pf-v5-c-form { gap: 16px; }
+.pf-v5-c-form__group { display: flex; flex-direction: column; gap: 6px; }
+.pf-v5-c-form__group-label { padding-bottom: 0; }
+.pf-v5-c-form__label-text {
+  color: var(--coddy-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.pf-v5-c-form__label-required { display: none; }
+
+.pf-v5-c-form-control {
+  background-color: var(--coddy-field) !important;
+  border: 1px solid var(--coddy-border) !important;
+  border-radius: var(--coddy-radius);
+  box-shadow: none !important;
+  color: var(--coddy-text);
+  transition: border-color .15s, box-shadow .15s;
+}
+.pf-v5-c-form-control::after { display: none !important; }
+.pf-v5-c-form-control > input {
+  background: transparent !important;
+  color: var(--coddy-text) !important;
+  padding: 11px 13px;
+  font-size: 15px;
+  border: 0;
+  outline: none;
+}
+.pf-v5-c-form-control > input:-webkit-autofill {
+  -webkit-text-fill-color: var(--coddy-text);
+  box-shadow: 0 0 0 1000px var(--coddy-field) inset;
+}
+.pf-v5-c-form-control:focus-within {
+  border-color: var(--coddy-accent) !important;
+  box-shadow: 0 0 0 3px rgba(124, 108, 255, .25) !important;
+}
+.pf-v5-c-form-control.pf-m-error { border-color: var(--coddy-danger) !important; }
+
+/* Password "eye" button */
+.pf-v5-c-input-group { gap: 8px; background: transparent; }
+.pf-v5-c-button.pf-m-control {
+  background: var(--coddy-field);
+  border: 1px solid var(--coddy-border);
+  border-radius: var(--coddy-radius);
+  color: var(--coddy-muted);
+}
+.pf-v5-c-button.pf-m-control::after { display: none; }
+.pf-v5-c-button.pf-m-control:hover { color: var(--coddy-text); }
+
+/* Remember me / helper row */
+.pf-v5-c-form__helper-text { margin-top: 6px; }
+.pf-v5-c-check__label { color: var(--coddy-muted); font-size: 13px; }
+.pf-v5-c-check__input { accent-color: var(--coddy-accent); }
+
+/* Primary button */
+.pf-v5-c-button.pf-m-primary {
+  background: var(--coddy-accent);
+  border: 0;
+  border-radius: var(--coddy-radius);
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(124, 108, 255, .35);
+  transition: background .15s, transform .05s;
+}
+.pf-v5-c-button.pf-m-primary:hover { background: var(--coddy-accent-hover); }
+.pf-v5-c-button.pf-m-primary:active { transform: translateY(1px); }
+.pf-v5-c-button.pf-m-primary:disabled { opacity: .6; }
+.pf-v5-c-form__actions { padding-top: 6px; }
+
+/* Errors and notices */
+.pf-v5-c-alert {
+  background: rgba(255, 107, 107, .08);
+  border: 1px solid rgba(255, 107, 107, .35);
+  border-radius: var(--coddy-radius);
+  color: var(--coddy-text);
+  box-shadow: none;
+  margin-bottom: 16px;
+}
+.pf-v5-c-alert.pf-m-success { background: rgba(74, 222, 128, .08); border-color: rgba(74, 222, 128, .35); }
+.pf-v5-c-alert.pf-m-info, .pf-v5-c-alert.pf-m-warning { background: rgba(124, 108, 255, .08); border-color: rgba(124, 108, 255, .35); }
+.pf-v5-c-alert__title { color: var(--coddy-text); font-size: 14px; }
+.pf-v5-c-alert__icon { color: var(--coddy-danger); }
+.pf-v5-c-alert.pf-m-success .pf-v5-c-alert__icon { color: #4ade80; }
+.pf-v5-c-alert.pf-m-info .pf-v5-c-alert__icon, .pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__icon { color: var(--coddy-accent); }
+.pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-text,
+.pf-v5-c-helper-text__item.pf-m-error .pf-v5-c-helper-text__item-icon,
+[id^="input-error-"] { color: var(--coddy-danger); font-size: 13px; }
+
+/* Links, footer, misc */
+a, .pf-v5-c-button.pf-m-link { color: var(--coddy-accent); }
+a:hover, .pf-v5-c-button.pf-m-link:hover { color: var(--coddy-accent-hover); }
+#kc-info, #kc-info-wrapper, .pf-v5-c-login__main-footer-band, #kc-registration {
+  color: var(--coddy-muted);
+  background: transparent;
+  padding: 0;
+  margin-top: 16px;
+  font-size: 13px;
+}
+.pf-v5-c-login__footer, #kc-locale { display: none; }
+p, .pf-v5-c-content { color: var(--coddy-muted); }
