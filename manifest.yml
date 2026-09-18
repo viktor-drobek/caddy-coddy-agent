@@ -1,6 +1,6 @@
 # caddy-coddy agent manifest: the skill itself. Each rendered site keeps its own caddy-coddy.yml.
 name: caddy-coddy
-version: 1.0.1
+version: 1.0.2
 description: Coddy skill that plans, builds, deploys, verifies and operates a Caddy + Keycloak + oauth2-proxy edge for a Coddy server.
 # Coddy version the templates and tests/smoke.sh were last proven against on a full plan-to-verify run.
 tested_coddy_version: 1.1.49

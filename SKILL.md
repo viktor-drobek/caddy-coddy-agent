@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.0.1
+version: 1.0.2
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -49,6 +49,26 @@ holding this `SKILL.md`; `coddy skills list` prints the search roots, typically
 `~/.coddy/skills/caddy-coddy`, `~/.agents/skills/caddy-coddy` or
 `<project>/.coddy/skills/caddy-coddy`) and call the scripts by that path, for example
 `bash ~/.coddy/skills/caddy-coddy/scripts/preflight.sh .`.
+
+## The plan questions (ask these, in one message, in the user's language)
+
+`references/plan.md` explains each one; when you cannot read files or run commands (plan mode,
+a dry run, denied permissions), ask them from here and stop after the architecture summary.
+
+1. Where does `coddy serve` run, on which address and port does it listen (`httpserver.host` /
+   `httpserver.port`, default `0.0.0.0:12345`), and is `httpserver.auth_token` set?
+2. Which host is the edge (Caddy, Keycloak, oauth2-proxy): the same machine or another one? It
+   needs Linux, Docker with the compose plugin, ssh key login, passwordless sudo, ports 80/443
+   open to the internet, about 1.5 GB of free RAM.
+3. The public DNS name (its record must point at the edge or a NAT forwarding 80/443 to it);
+   TLS comes from Let's Encrypt through Caddy automatically.
+4. The first user's username (created with a temporary password) and optional email.
+5. The project directory here (default: current directory) and on the edge (default
+   `/opt/caddy-coddy`).
+6. Is this machine the Coddy host? Otherwise the user exports `CODDY_API_TOKEN` for the tools.
+
+Then summarise the architecture with their names in it and wait for agreement before writing
+`caddy-coddy.yml` (`scripts/manifest.py init ...`) and running `scripts/preflight.sh`.
 
 ## Ground rules
 
