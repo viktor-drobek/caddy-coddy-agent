@@ -25,6 +25,33 @@
 #
 # All addresses and secrets come from .env (see .env.example).
 
+# Expanded forward_auth: successful auth must also return refreshed cookies to
+# the browser. copy_response_headers preserves every Set-Cookie value, including
+# split session cookies; copy_headers alone would copy them into the request.
+(oauth2_auth) {
+	method GET
+	rewrite /oauth2/auth
+	header_up X-Forwarded-Method {method}
+	header_up X-Forwarded-Uri {uri}
+	@authenticated status 2xx
+	handle_response @authenticated {
+		@auth_user not vars {rp.header.X-Auth-Request-User} ""
+		@auth_username not vars {rp.header.X-Auth-Request-Preferred-Username} ""
+		@auth_email not vars {rp.header.X-Auth-Request-Email} ""
+		route {
+			# Never retain caller-supplied identity headers when the auth response
+			# omits an optional claim (for example a service account's email).
+			request_header -X-Auth-Request-*
+			request_header @auth_user X-Auth-Request-User {rp.header.X-Auth-Request-User}
+			request_header @auth_username X-Auth-Request-Preferred-Username {rp.header.X-Auth-Request-Preferred-Username}
+			request_header @auth_email X-Auth-Request-Email {rp.header.X-Auth-Request-Email}
+			copy_response_headers {
+				include Set-Cookie
+			}
+		}
+	}
+}
+
 (coddy_upstream) {
 	reverse_proxy {env.CODDY_BACKEND} {
 		# Coddy's static API token (httpserver.auth_token in @@CODDY_HOST_NAME@@:~/.coddy/config.yaml).
@@ -48,18 +75,23 @@
 		# session cookie. Keycloak's own admin credentials still apply on top.
 		@kc_admin path /auth/admin/* /auth/realms/master/*
 		handle @kc_admin {
-			forward_auth {env.OAUTH2_PROXY_BACKEND} {
-				uri /oauth2/auth
-				# The console calls the admin API with its own master-realm
-				# bearer token; check the session cookie only.
-				header_up -Authorization
+			route {
+				reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+					import oauth2_auth
+					# Check only the cookie; preserve the master-realm bearer token
+					# on the original request forwarded to Keycloak afterwards.
+					header_up -Authorization
 
-				@unauthenticated status 401
-				handle_response @unauthenticated {
-					redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+					@unauthenticated status 401
+					handle_response @unauthenticated {
+						copy_response_headers {
+							include Set-Cookie
+						}
+						redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+					}
 				}
+				reverse_proxy {env.KEYCLOAK_BACKEND}
 			}
-			reverse_proxy {env.KEYCLOAK_BACKEND}
 		}
 
 		# Realm "coddy": login pages, OIDC endpoints, account console, theme assets.
@@ -76,11 +108,12 @@
 	# --- Services: Keycloak bearer token. Invalid/expired -> 401 from oauth2-proxy. ---
 	@bearer header Authorization Bearer*
 	handle @bearer {
-		forward_auth {env.OAUTH2_PROXY_BACKEND} {
-			uri /oauth2/auth
-			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+			}
+			import coddy_upstream
 		}
-		import coddy_upstream
 	}
 
 	# --- Browser page loads (Accept: text/html): session cookie, otherwise go
@@ -89,25 +122,30 @@
 	# login state cookie and the callback would fail with a PKCE mismatch. ---
 	@page header Accept *text/html*
 	handle @page {
-		forward_auth {env.OAUTH2_PROXY_BACKEND} {
-			uri /oauth2/auth
-			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
 
-			@unauthenticated status 401
-			handle_response @unauthenticated {
-				redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+				@unauthenticated status 401
+				handle_response @unauthenticated {
+					copy_response_headers {
+						include Set-Cookie
+					}
+					redir * /oauth2/start?rd={scheme}://{host}{uri} 302
+				}
 			}
+			import coddy_upstream
 		}
-		import coddy_upstream
 	}
 
 	# --- Everything else from a browser (fetch/XHR/EventSource): cookie or 401. ---
 	handle {
-		forward_auth {env.OAUTH2_PROXY_BACKEND} {
-			uri /oauth2/auth
-			copy_headers X-Auth-Request-User X-Auth-Request-Preferred-Username X-Auth-Request-Email
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+			}
+			import coddy_upstream
 		}
-		import coddy_upstream
 	}
 
 	# Security headers.

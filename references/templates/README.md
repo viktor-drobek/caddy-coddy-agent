@@ -93,8 +93,15 @@ it in: `CODDY_API_TOKEN` is `httpserver.auth_token` from
 (`openssl rand -hex 32`).
 
 Keycloak takes about a minute to start; `deploy.sh` waits for its health check
-before running `bootstrap.sh`. The Caddy volume `caddy-coddy_caddy_data` keeps
+before running `bootstrap.sh`. Confidential clients are imported disabled, with
+no shared placeholder secret; bootstrap enables each one together with its real
+secret. The Caddy volume `caddy-coddy_caddy_data` keeps
 the Let's Encrypt certificate across redeploys.
+
+A changed `Caddyfile` recreates Caddy so its single-file bind mount sees the new
+file and the new routes take effect. This briefly interrupts active connections.
+The auth handler forwards refreshed session cookies, including split cookies,
+to the browser on successful requests.
 
 ## Adding a user
 
@@ -243,6 +250,8 @@ overrides it to 7 days). To add a new service, run `./add-service.sh <client-id>
 it creates a client in realm `coddy` with *Client authentication* on, *Service
 accounts roles* on and a **Mapper → Audience** with *Included Client Audience*
 `coddy-web`, and prints the client secret once (`--rotate` issues a new one).
+The managed `coddy-service` client is excluded: rotate `CODDY_SERVICE_CLIENT_SECRET`
+in the edge's `.env` and redeploy, since bootstrap owns that client's secret.
 The same can be done in the admin console by copying `coddy-service` from
 `keycloak/import/realm-coddy.json`. Without that mapper oauth2-proxy rejects the
 token (`aud` check).
@@ -288,6 +297,9 @@ client-credentials token, `coddy-cli` password-grant token, `/v1/models`,
 `coddy cli --remote` with a Keycloak token and with a wrong one (this last
 check needs a Linux `coddy` binary of the edge's architecture on the machine
 running the test).
+
+Failed staging, a nonzero SSH exit, or a missing remote `SMOKE_COMPLETE` marker
+fails the run. `--record` never updates the manifest for an interrupted or failed run.
 
 The Coddy version behind the proxy is read from `/openapi.json` and compared
 with `coddy_version` in `caddy-coddy.yml`, the version of the last recorded

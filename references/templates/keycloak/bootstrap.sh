@@ -25,8 +25,10 @@ set_client_secret() {
     echo "bootstrap: client $client_id not found in realm $REALM (import failed?)" >&2
     return 1
   fi
-  kc update "clients/$id" -r "$REALM" -s secret="$secret"
-  echo "bootstrap: secret set for client $client_id"
+  # Confidential clients are imported disabled, without a shared placeholder
+  # secret. Install the real secret and enable the client in the same update.
+  kc update "clients/$id" -r "$REALM" -s secret="$secret" -s enabled=true
+  echo "bootstrap: secret set and client $client_id enabled"
 }
 
 # Accounts are created by admins with just a username (+ optional email); do not

@@ -43,7 +43,9 @@ curl -H "Authorization: Bearer $SVC_TOKEN" <public_url>/coddy/sessions
 Service tokens live 15 minutes (the realm's `accessTokenLifespan`). Every machine client must
 carry the **audience mapper** for `coddy-web`, otherwise oauth2-proxy rejects its tokens (`aud`
 check); `add-service.sh` adds it. `coddy-service` is the example client from the realm import; its
-secret is `CODDY_SERVICE_CLIENT_SECRET` in `.env`.
+secret is `CODDY_SERVICE_CLIENT_SECRET` in `.env`. To rotate this managed client, edit that value
+on the edge and redeploy. `add-service.sh` rejects `coddy-service` because bootstrap would
+otherwise overwrite the new secret on the next deploy.
 
 ## Coddy's own token
 

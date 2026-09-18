@@ -14,7 +14,7 @@
 # Exit status 1 when any check fails.
 #
 # After a Coddy release: rerun, and if everything passes, `--record`.
-set -uo pipefail
+set -euo pipefail
 cd "$(dirname "$0")/.."
 
 TARGET_HOST=${TARGET_HOST:-@@EDGE_SSH@@}
@@ -43,13 +43,25 @@ if [ "$WITH_CLI" = 1 ]; then
   echo "local coddy binary: $("$CODDY_BIN" --version 2>/dev/null) ($CODDY_BIN)"
 fi
 
-out=$(ssh "$TARGET_HOST" "TARGET_DIR=$TARGET_DIR WITH_CLI=$WITH_CLI bash /tmp/coddy-smoke/smoke-remote.sh" 2>&1)
+remote_status=0
+out=$(ssh "$TARGET_HOST" "$(printf 'TARGET_DIR=%q WITH_CLI=%q bash /tmp/coddy-smoke/smoke-remote.sh' "$TARGET_DIR" "$WITH_CLI")" 2>&1) || remote_status=$?
 printf '%s\n' "$out"
+
+# A partial run can contain PASS lines (and even a version) before SSH drops or
+# the remote script aborts. Neither is proof that every requested check ran.
+if [ "$remote_status" -ne 0 ]; then
+  echo "RESULT: remote smoke test failed (exit $remote_status)" >&2
+  exit 1
+fi
+if ! grep -qx 'SMOKE_COMPLETE' <<<"$out"; then
+  echo "RESULT: remote smoke test did not complete" >&2
+  exit 1
+fi
 
 fails=$(grep -c '^FAIL' <<<"$out" || true)
 passes=$(grep -c '^PASS' <<<"$out" || true)
 version=$(sed -n 's/^CODDY_VERSION //p' <<<"$out" | head -n1)
-tested=$(sed -n 's/^coddy_version:[[:space:]]*//p' "$MANIFEST" 2>/dev/null | head -n1)
+tested=$(sed -n 's/^coddy_version:[[:space:]]*//p' "$MANIFEST" 2>/dev/null | head -n1 || true)
 tested=${tested:-none}
 
 echo

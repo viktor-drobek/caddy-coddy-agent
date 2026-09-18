@@ -99,3 +99,15 @@ Seven invariants the templates encode and the skill refuses to drift from, spell
 `references/security-contract.md`. In short: Coddy's token stays in the proxy, only page loads are
 redirected to the login, issuer and audience are verified, secrets stay out of git, users live in
 realm `coddy`, the Keycloak admin API sits behind the login, and deploys wait for Keycloak's health.
+
+## Local regression checks
+
+```bash
+python3 tests/regression.py
+CADDY_BIN=/path/to/caddy python3 tests/regression.py
+```
+
+The checks use temporary rendered sites and command stubs; they never contact the edge. With
+`CADDY_BIN`, they also run Caddy against HTTP stubs bound to loopback to check authentication,
+split-cookie refresh, redirects, identity headers and request-body/token isolation. These checks
+complement configuration validation and the deployed stack's end-to-end smoke tests.

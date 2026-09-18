@@ -2,15 +2,16 @@
 # Runs on @@EDGE_NAME@@ (copied to /tmp/coddy-smoke by tests/smoke.sh). Prints PASS/FAIL lines and
 # "CODDY_VERSION x.y.z". Env: TARGET_DIR, WITH_CLI.
 set -uo pipefail
-cd "$TARGET_DIR"
-set -a; . ./.env; set +a
+cd "$TARGET_DIR" || exit 1
+set -a; . ./.env || exit 1; set +a
 HOST=${PUBLIC_HOST:-@@PUBLIC_HOST@@}
 URL=${PUBLIC_URL:-https://$HOST}
 R="--resolve $HOST:443:127.0.0.1"
 KC="$KC_HOSTNAME/realms/coddy/protocol/openid-connect"
 
+failures=0
 pass() { echo "PASS $1"; }
-fail() { echo "FAIL $1${2:+ -- $2}"; }
+fail() { echo "FAIL $1${2:+ -- $2}"; failures=$((failures + 1)); }
 expect() { # expect <name> <expected> <actual>
   if [ "$2" = "$3" ]; then pass "$1"; else fail "$1" "expected '$2', got '$3'"; fi
 }
@@ -98,3 +99,7 @@ if [ "$WITH_CLI" = 1 ]; then
         python:3.12-alpine /coddybin/coddy cli --remote "$URL" --remote-token wrong --plain --prompt hi 2>&1 </dev/null)
   contains "coddy cli --remote with a wrong token is refused" "unauthorized" "$OUT"
 fi
+
+# The wrapper records a version only after a successful exit and this marker.
+[ "$failures" -eq 0 ] || exit 1
+echo "SMOKE_COMPLETE"

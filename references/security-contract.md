@@ -18,8 +18,9 @@ under `keycloak/`.
    oauth2-proxy start before Caddy and never depend on its own public name; `KC_HOSTNAME` pins the
    public issuer.
 4. **Secrets stay out of the repository.** `.env` is git-ignored and excluded from rsync; compose
-   fails fast on an unset required secret (`${VAR:?}`); `realm-coddy.json` carries
-   `set-by-bootstrap` placeholders and `bootstrap.sh` injects the real client secrets from `.env`.
+   fails fast on an unset required secret (`${VAR:?}`). The realm imports confidential clients
+   disabled, without secrets. Bootstrap installs each real secret from `.env` and enables its
+   client in the same update, so a failed first bootstrap leaves it unusable.
 5. **Users live in realm `coddy`.** A user in `master` is a Keycloak admin and cannot sign in to
    Coddy. Every tool here creates users in `coddy`.
 6. **The admin API is not public.** `/auth/admin/*` and `/auth/realms/master/*` sit behind
@@ -32,6 +33,9 @@ under `keycloak/`.
 
 Also load-bearing:
 
+- The expanded `forward_auth` handler copies every `Set-Cookie` response header to the browser,
+  including split cookies and cookie deletion on redirects. Without this, the browser keeps
+  stale tokens after oauth2-proxy's five-minute refresh.
 - `cookie_csrf_per_request = true`, `cookie_csrf_expire = "2h"` and Keycloak's
   `accessCodeLifespanLogin = 3600`: a slow first login, password change included, must not end in
   "Unable to find a valid CSRF token".

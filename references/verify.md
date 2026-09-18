@@ -28,7 +28,9 @@ or `FAIL` lines:
   this machine (it is copied over and run in a container on the edge); `verify.sh` skips it
   otherwise and says so.
 
-`--record` writes `coddy_version` and `verified_at` into `caddy-coddy.yml` after a green run;
+`--record` writes `coddy_version` and `verified_at` into `caddy-coddy.yml` only after successful
+staging, a zero SSH exit status, the remote `SMOKE_COMPLETE` marker, and no failed checks.
+Interrupted or incomplete runs fail without changing the manifest. After a green run,
 commit that change. Without `--record`, a version that differs from the recorded one is reported.
 
 ## After a Coddy upgrade

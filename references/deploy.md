@@ -20,7 +20,8 @@ bash "$CC/scripts/deploy.sh" --skip-validate <project>
 3. The project's `deploy.sh` rsyncs the checkout (without `.env`, `.git` and agent folders), runs
    `docker compose pull` and `up -d`, waits for the Keycloak health check (up to five minutes on
    a slow machine), then runs `keycloak/bootstrap.sh` inside the container, retrying while
-   Keycloak still imports the realm.
+   Keycloak still imports the realm. Confidential clients start disabled with no shared secret;
+   bootstrap enables each one together with its generated secret.
 4. The only secret printed is the initial user's temporary password. Hand it to the user; the
    first sign-in at `<public_url>/` forces a new one.
 5. Caddy obtains the Let's Encrypt certificate on the first request or shortly after starting;
@@ -33,6 +34,8 @@ The same command. It is idempotent: unchanged files are not sent again, containe
 only when their configuration changed, and `bootstrap.sh` re-applies secrets and settings without
 touching existing users. When theme files changed, `deploy.sh` clears Keycloak's gzip cache and
 restarts it; when `oauth2-proxy.toml` changed, it restarts oauth2-proxy.
+When `Caddyfile` changed, it recreates Caddy so the single-file bind mount picks up rsync's
+replacement file and the new routing takes effect. This briefly interrupts active connections.
 
 ## Reading the output
 

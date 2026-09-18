@@ -28,6 +28,9 @@ if [ -z "$CLIENT" ] || [ "$CLIENT" = "-h" ] || [ "$CLIENT" = "--help" ]; then
 fi
 case "$CLIENT" in
   coddy-web|coddy-cli) echo "'$CLIENT' is a login client of the stack, not a service client" >&2; exit 2 ;;
+  coddy-service)
+    echo "'coddy-service' is managed by bootstrap: rotate CODDY_SERVICE_CLIENT_SECRET in the edge's .env and redeploy" >&2
+    exit 2 ;;
 esac
 SECRET=${CLIENT_SECRET:-$(openssl rand -hex 32)}
 
