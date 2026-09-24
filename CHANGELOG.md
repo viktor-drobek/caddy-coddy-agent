@@ -10,6 +10,11 @@ the `Release` workflow; install a specific one with
 
 ## [1.1.0] - 2026-09-24
 
+Proven on the reference deployment against Coddy 1.2.12: the existing site was
+upgraded in place (`.env` gained the Telegram keys, tg-auth started, Caddy
+recreated) and the full smoke test passed 45 of 45 checks, 13 of them for the
+Telegram sign-in with real signed `initData`.
+
 ### Added
 
 - **Telegram Mini App sign-in.** New service `tg-auth` (`tg-auth/server.py`,
