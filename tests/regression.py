@@ -182,44 +182,52 @@ class ProxyTest(SiteFixture):
     def setUp(self):
         super().setUp()
         self.requests = []
-        requests = self.requests
+        self.swarm_requests = []
 
-        class Stub(http.server.BaseHTTPRequestHandler):
-            def log_message(self, *_):
-                pass
+        def stub_handler(requests, backend):
+            class Stub(http.server.BaseHTTPRequestHandler):
+                def log_message(self, *_):
+                    pass
 
-            def do_GET(self):
-                requests.append((self.path, self.command, dict(self.headers)))
-                if self.path == "/tg/auth/verify":
-                    good = "_coddy_tg=valid" in self.headers.get("Cookie", "")
-                    self.send_response(202 if good else 401)
-                    if good:
-                        self.send_header("X-Auth-Request-User", "tg:42")
-                        self.send_header("X-Auth-Request-Preferred-Username", "tguser")
-                    self.end_headers()
-                elif self.path == "/oauth2/auth":
-                    good = self.headers.get("Cookie") == "session=valid" or self.headers.get("Authorization") == "Bearer valid"
-                    self.send_response(202 if good else 401)
-                    self.send_header("Set-Cookie", "session=refreshed; Path=/" if good else "session=; Max-Age=0; Path=/")
-                    if good:
-                        self.send_header("Set-Cookie", "session_1=second-part; Path=/")
-                        self.send_header("X-Auth-Request-Preferred-Username", "alice")
-                    self.end_headers()
-                else:
-                    size = int(self.headers.get("Content-Length", "0"))
-                    body = self.rfile.read(size).decode()
-                    self.send_response(200)
-                    self.send_header("Set-Cookie", "app=own-cookie; Path=/")
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"method": self.command, "body": body,
-                                                "headers": dict(self.headers)}).encode())
+                def do_GET(self):
+                    requests.append((self.path, self.command, dict(self.headers)))
+                    if self.path == "/tg/auth/verify":
+                        good = "_coddy_tg=valid" in self.headers.get("Cookie", "")
+                        self.send_response(202 if good else 401)
+                        if good:
+                            self.send_header("X-Auth-Request-User", "tg:42")
+                            self.send_header("X-Auth-Request-Preferred-Username", "tguser")
+                        self.end_headers()
+                    elif self.path == "/oauth2/auth":
+                        good = self.headers.get("Cookie") == "session=valid" or self.headers.get("Authorization") == "Bearer valid"
+                        self.send_response(202 if good else 401)
+                        self.send_header("Set-Cookie", "session=refreshed; Path=/" if good else "session=; Max-Age=0; Path=/")
+                        if good:
+                            self.send_header("Set-Cookie", "session_1=second-part; Path=/")
+                            self.send_header("X-Auth-Request-Preferred-Username", "alice")
+                        self.end_headers()
+                    else:
+                        size = int(self.headers.get("Content-Length", "0"))
+                        body = self.rfile.read(size).decode()
+                        self.send_response(200)
+                        self.send_header("Set-Cookie", "app=own-cookie; Path=/")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"backend": backend, "method": self.command,
+                                                    "body": body, "headers": dict(self.headers)}).encode())
 
-            do_POST = do_GET
+                do_POST = do_GET
 
-        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Stub)
+            return Stub
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), stub_handler(self.requests, "coddy"))
+        swarm_server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), stub_handler(self.swarm_requests, "swarm"))
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        threading.Thread(target=swarm_server.serve_forever, daemon=True).start()
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
+        self.addCleanup(swarm_server.server_close)
+        self.addCleanup(swarm_server.shutdown)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             self.port = sock.getsockname()[1]
@@ -227,9 +235,11 @@ class ProxyTest(SiteFixture):
         config.write_text("{\n\tadmin off\n\tauto_https off\n}\n" + config.read_text().replace(
             "https://review.example.com", f"http://127.0.0.1:{self.port}"))
         self.env.update(CODDY_BACKEND=f"127.0.0.1:{server.server_port}",
+                        SWARM_RELAY_BACKEND=f"127.0.0.1:{swarm_server.server_port}",
                         KEYCLOAK_BACKEND=f"127.0.0.1:{server.server_port}",
                         OAUTH2_PROXY_BACKEND=f"127.0.0.1:{server.server_port}", TG_AUTH_BACKEND=f"127.0.0.1:{server.server_port}",
                         CODDY_API_TOKEN="test-coddy-token",
+                        CODDY_SWARM_TOKEN="test-swarm-token",
                         XDG_CONFIG_HOME=str(self.base), XDG_DATA_HOME=str(self.base))
         log = (self.base / "caddy.log").open("w+")
         self.addCleanup(log.close)
@@ -293,6 +303,37 @@ class ProxyTest(SiteFixture):
         self.assertEqual(self.requests[-2][1], "GET")
         self.assertEqual(self.requests[-2][2]["X-Forwarded-Method"], "POST")
         self.assertEqual(self.requests[-2][2]["X-Forwarded-Uri"], "/coddy/sessions")
+
+    def test_swarm_relay_prefix_and_absolute_paths(self):
+        for path, upstream_path in (
+                ("/swarm-relay/swarm/topology", "/swarm/topology"),
+                ("/swarm/topology", "/swarm/topology")):
+            with self.subTest(path=path):
+                status, _, body = self.request(path, {
+                    "Cookie": "session=valid", "Authorization": "Bearer caller-token"})
+                self.assertEqual(status, 200)
+                upstream = json.loads(body)
+                self.assertEqual(upstream["backend"], "swarm")
+                self.assertEqual(upstream["headers"]["Authorization"], "Bearer test-swarm-token")
+                self.assertEqual(upstream["headers"]["X-Forwarded-User"], "alice")
+                self.assertEqual(self.swarm_requests[-1][0], upstream_path)
+                auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
+                self.assertNotIn("Authorization", auth[2])
+
+    def test_swarm_remote_root_uses_coddy_backend_token(self):
+        for path, upstream_path in (
+                ("/swarm-relay/coddy/auth/me", "/coddy/auth/me"),
+                ("/swarm-relay/v1/models", "/v1/models")):
+            with self.subTest(path=path):
+                status, _, body = self.request(path, {
+                    "Cookie": "session=valid", "Authorization": "Bearer caller-token"})
+                self.assertEqual(status, 200)
+                upstream = json.loads(body)
+                self.assertEqual(upstream["backend"], "coddy")
+                self.assertEqual(upstream["headers"]["Authorization"], "Bearer test-coddy-token")
+                self.assertEqual(self.requests[-1][0], upstream_path)
+                auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
+                self.assertNotIn("Authorization", auth[2])
 
     def test_missing_identity_claim_cannot_be_spoofed(self):
         status, _, body = self.request("/coddy/sessions", {

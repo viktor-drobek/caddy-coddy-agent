@@ -76,6 +76,59 @@ It reads the token from Coddy's config (or `CODDY_HTTP_TOKEN`), checks that Codd
 writes `CODDY_API_TOKEN` into the edge's `.env`, restarts Caddy and verifies `/coddy/auth/me`
 with a Keycloak service token.
 
+## Swarm relay
+
+When the Coddy host also runs a Swarm Relay, set `CODDY_SWARM_TOKEN` in the edge `.env` to the
+relay's `swarm.auth_token`, then redeploy. Authenticated browser traffic may use either the
+configured remote prefix `<public_url>/swarm-relay` or the absolute `/swarm/*` paths the UI uses
+after it recognises a relay. Caddy discards the caller's `Authorization` header and presents
+`CODDY_SWARM_TOKEN` only to `SWARM_RELAY_BACKEND`; `/swarm-relay/coddy/*` and
+`/swarm-relay/v1/*` remain on the ordinary Coddy backend with `CODDY_API_TOKEN`.
+
+The three Swarm credentials have different jobs:
+
+| Credential | Purpose |
+|---|---|
+| `swarm.auth_token` / edge `CODDY_SWARM_TOKEN` | lets a client use the relay |
+| `swarm.pairing_tokens` / `swarm.join[].pairing_token` | lets a node register |
+| `swarm.join[].token` | lets the relay call that node's HTTP API; it must equal that node's `httpserver.auth_token` |
+
+### `swarm-<host>: 401 Unauthorized` while every relay request is HTTP 200
+
+This is a fan-out warning inside the JSON response, not necessarily a Caddy response status. The
+relay and topology endpoints can all return HTTP 200 while their `warnings` array contains, for
+example, `swarm-ml: 401 Unauthorized`. The node is registered, but the per-node token handed to
+the relay does not authenticate against that node's HTTP API.
+
+Check only status metadata; do not print tokens or session bodies:
+
+```bash
+curl -sS -H "Authorization: Bearer $CODDY_SWARM_TOKEN" \
+  http://127.0.0.1:12346/swarm/sessions?limit=1 \
+  | jq '{warnings, node_more}'
+```
+
+For a self-node, a typical configuration is:
+
+```yaml
+httpserver:
+  auth_token: "${CODDY_HTTP_TOKEN}"
+swarm:
+  join:
+    - url: http://127.0.0.1:12346
+      name: swarm-ml
+      pairing_token: "${CODDY_SWARM_PAIRING_TOKEN}"
+      token: "${CODDY_HTTP_TOKEN}"
+```
+
+Both references must resolve to the same non-empty value. A common failure is setting
+`CODDY_HTTP_TOKEN` only in a systemd override while config interpolation reads `~/.coddy/.env`:
+the HTTP server receives the override, but `swarm.join[].token` is registered with a different or
+empty value. Put the same token in the private env source used by the config (`chmod 600`), restart
+Coddy so the node re-registers, and verify that `warnings` is empty and the mounted endpoints
+`/swarm/nodes/<name>/coddy/auth/me` and `/swarm/nodes/<name>/v1/models` return 200. Compare only
+lengths or hashes when diagnosing; never log the credentials themselves.
+
 ## Keycloak admin console
 
 `<public_url>/auth/admin/`: first the Coddy login (a session cookie from realm `coddy` is

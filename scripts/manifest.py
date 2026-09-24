@@ -7,7 +7,8 @@ without a YAML library.
 
     manifest.py [-f FILE] init --public-host HOST --edge-ssh [USER@]HOST --coddy-backend HOST:PORT
                 [--public-url URL] [--edge-dir DIR] [--edge-name NAME] [--coddy-host-name NAME]
-                [--coddy-local-url URL] [--initial-user USER] [--keep PATHS] [--force]
+                [--coddy-local-url URL] [--swarm-relay-backend HOST:PORT]
+                [--initial-user USER] [--keep PATHS] [--force]
     manifest.py [-f FILE] check                validate; print every resolved variable
     manifest.py [-f FILE] get KEY [DEFAULT]    print one value (exit 1 when missing and no default)
     manifest.py [-f FILE] set KEY VALUE ...    update or append keys, keeping comments and order
@@ -39,6 +40,7 @@ FIELDS = [
     ("edge_dir", "Directory on the edge that receives the project (rsync target and docker compose project).", "/opt/caddy-coddy"),
     ("coddy_host_name", "Short name of the host running coddy serve, used in comments and documentation.", ""),
     ("coddy_backend", "coddy serve address as seen from the edge (host:port; 127.0.0.1:PORT when both share one host).", None),
+    ("swarm_relay_backend", "Optional Swarm Relay address as seen from the edge (host:port; defaults to the Coddy host on port 12346).", ""),
     ("coddy_local_url", "coddy serve URL as seen from the machine running the tools (init-env.sh, sync-coddy-token.sh).", ""),
     ("initial_user", "First user of realm coddy, created with a temporary password (empty: none).", ""),
     ("telegram_user_ids", "Telegram user ids allowed to open Coddy as a Telegram Mini App, comma-separated (empty: Telegram sign-in off).", ""),
@@ -119,6 +121,11 @@ def derive(values: dict[str, str]) -> dict[str, str]:
     if not match or not 0 < int(match.group(2)) < 65536:
         raise ManifestError(f"coddy_backend {v['coddy_backend']!r} must be host:port as seen from the edge")
     v["CODDY_BACKEND_HOST"], v["CODDY_BACKEND_PORT"] = match.group(1), match.group(2)
+    v["swarm_relay_backend"] = v.get("swarm_relay_backend") or f"{match.group(1)}:12346"
+    swarm_match = BACKEND_RE.match(v["swarm_relay_backend"])
+    if not swarm_match or not 0 < int(swarm_match.group(2)) < 65536:
+        raise ManifestError(
+            f"swarm_relay_backend {v['swarm_relay_backend']!r} must be host:port as seen from the edge")
 
     v["edge_name"] = v.get("edge_name") or host
     v["coddy_host_name"] = v.get("coddy_host_name") or match.group(1)
@@ -189,6 +196,7 @@ def cmd_init(args) -> int:
         "edge_dir": args.edge_dir or "",
         "coddy_host_name": args.coddy_host_name or "",
         "coddy_backend": args.coddy_backend,
+        "swarm_relay_backend": args.swarm_relay_backend or "",
         "coddy_local_url": args.coddy_local_url or "",
         "initial_user": args.initial_user or "",
         "telegram_user_ids": args.telegram_user_ids or "",
@@ -273,7 +281,7 @@ def main(argv=None) -> int:
     p_init.add_argument("--public-host", required=True)
     p_init.add_argument("--edge-ssh", required=True)
     p_init.add_argument("--coddy-backend", required=True)
-    for option in ("--public-url", "--edge-dir", "--edge-name", "--coddy-host-name", "--coddy-local-url", "--initial-user", "--telegram-user-ids", "--keep"):
+    for option in ("--public-url", "--edge-dir", "--edge-name", "--coddy-host-name", "--coddy-local-url", "--swarm-relay-backend", "--initial-user", "--telegram-user-ids", "--keep"):
         p_init.add_argument(option)
     p_init.add_argument("--force", action="store_true")
     p_init.set_defaults(func=cmd_init)

@@ -130,6 +130,71 @@
 		reverse_proxy {env.OAUTH2_PROXY_BACKEND}
 	}
 
+	# --- Coddy swarm relay: authenticate the browser session through oauth2-proxy,
+	# then replace the caller's Authorization header with the relay client token. ---
+	# The remote environment also requests the relay host's own Coddy API. Keep
+	# those requests on CODDY_BACKEND; only /swarm/* belongs to the relay port.
+	handle /swarm-relay/coddy/* {
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+				header_up -Authorization
+			}
+			uri strip_prefix /swarm-relay
+			import coddy_upstream
+		}
+	}
+	handle /swarm-relay/v1/* {
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+				header_up -Authorization
+			}
+			uri strip_prefix /swarm-relay
+			import coddy_upstream
+		}
+	}
+	handle /swarm-relay/* {
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+				# Check only the Keycloak session cookie. A caller-supplied bearer
+				# must neither be interpreted as a Keycloak JWT nor reach the relay.
+				header_up -Authorization
+			}
+			uri strip_prefix /swarm-relay
+			reverse_proxy {env.SWARM_RELAY_BACKEND} {
+				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
+				header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
+				flush_interval -1
+				transport http {
+					read_timeout 0
+					write_timeout 0
+				}
+			}
+		}
+	}
+
+	# The UI uses absolute /swarm/* paths after it recognises a relay and while
+	# navigating node mounts, even when the configured remote has a path prefix.
+	handle /swarm/* {
+		route {
+			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
+				import oauth2_auth
+				header_up -Authorization
+			}
+			reverse_proxy {env.SWARM_RELAY_BACKEND} {
+				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
+				header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
+				flush_interval -1
+				transport http {
+					read_timeout 0
+					write_timeout 0
+				}
+			}
+		}
+	}
+
 	# --- Telegram Mini App: the landing page (reads initData inside Telegram and
 	# posts it to /tg/auth/login) and the login endpoint are public; the verify
 	# endpoint is for this Caddyfile only. Empty TG_BOT_TOKEN turns all of it off

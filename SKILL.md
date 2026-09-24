@@ -1,13 +1,14 @@
 ---
 name: caddy-coddy
-version: 1.1.0
+version: 1.2.0
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
   architecture with the user, renders a Caddy + Keycloak + oauth2-proxy stack from templates into a
   project directory, validates it, deploys it with docker compose to the edge host of the user's choice
-  over ssh, tests every access path end to end, records the Coddy version, and then provides the tools
-  for users, tokens and service clients. Needs the user's answers about hosts and the public name.
+  over ssh, optionally exposes its Swarm Relay to authenticated browsers, tests every access path end
+  to end, records the Coddy version, and then provides the tools for users, tokens and service clients.
+  Needs the user's answers about hosts and the public name.
 ---
 
 # caddy-coddy: a public, authenticated edge for a Coddy server
@@ -18,6 +19,7 @@ You build and operate this, on hosts the user names:
 internet ── https://<public_host> ──► Caddy :443 (edge host, host network)
                                          ├── /auth/*    → Keycloak (realm "coddy": users, login page)
                                          ├── /oauth2/*  → oauth2-proxy (OIDC client, session cookie)
+                                         ├── /swarm/*   → Swarm Relay, Authorization := CODDY_SWARM_TOKEN
                                          └── /*  forward_auth → oauth2-proxy, then reverse_proxy → coddy serve
                                                 Authorization := "Bearer <CODDY_API_TOKEN>"
 ```
@@ -71,6 +73,9 @@ a dry run, denied permissions), ask them from here and stop after the architectu
 6. Is this machine the Coddy host? Otherwise the user exports `CODDY_API_TOKEN` for the tools.
 7. Telegram Mini App wanted? Then the numeric Telegram user ids allowed in, and the bot it belongs
    to (its token is read from the local Coddy config on the Coddy host, else `TG_BOT_TOKEN`).
+8. Is `coddy serve` also a Swarm Relay? If so, confirm its address (the generated default is the
+   Coddy backend host on port 12346) and that `swarm.auth_token` is set. The token is copied or
+   entered on the edge as `CODDY_SWARM_TOKEN`; never paste it into the conversation.
 
 Then summarise the architecture with their names in it and wait for agreement before writing
 `caddy-coddy.yml` (`scripts/manifest.py init ...`) and running `scripts/preflight.sh`.

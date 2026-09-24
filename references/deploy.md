@@ -54,6 +54,7 @@ healthy", "running keycloak bootstrap" with `bootstrap: ...` lines, `docker comp
 | `bootstrap: client coddy-web not found` | The realm import failed; `docker compose logs keycloak` shows why |
 | Page load returns 502 | Caddy cannot reach `coddy_backend`: check that `coddy serve` listens on that address and that the edge's firewall allows it |
 | Login works, then a `500 Proceed` page | oauth2-proxy CSRF/PKCE mismatch: only page loads may be redirected to `/oauth2/start`; see the security contract |
+| Relay endpoints return 200 but the JSON warns `swarm-<host>: 401 Unauthorized` | The node registered with a `swarm.join[].token` that does not match its own `httpserver.auth_token`; fix the node's private env source and restart it so it re-registers |
 | `Unable to find a valid CSRF token` | The login took longer than `cookie_csrf_expire`; the template sets 2 h |
 | `sudo: a password is required` | The ssh user has no passwordless sudo on the edge |
 

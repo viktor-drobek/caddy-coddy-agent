@@ -8,6 +8,43 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.2.0] - 2026-09-24
+
+Proven on the reference deployment against Coddy 1.2.16: deploy succeeded with every service
+healthy and all 53 end-to-end smoke checks passed, including both Swarm URL forms, relay-root API
+routing and an empty fan-out `warnings` array.
+
+### Added
+
+- **Authenticated Swarm Relay access.** Caddy exposes the relay at
+  `/swarm-relay/swarm/*` and at the absolute `/swarm/*` paths used by the Coddy UI after it
+  recognises a relay. oauth2-proxy authenticates the browser session, then Caddy discards any
+  caller `Authorization` and presents the new `CODDY_SWARM_TOKEN` only to
+  `SWARM_RELAY_BACKEND`.
+- Root API compatibility for a relay remote: `/swarm-relay/coddy/*` and
+  `/swarm-relay/v1/*` go to the ordinary Coddy backend with `CODDY_API_TOKEN`, so the UI can load
+  the relay host's own sessions and models without sending relay API paths to the wrong port.
+- `swarm_relay_backend` is now part of `caddy-coddy.yml` and the planning CLI. It defaults to the
+  Coddy backend host on port 12346 but records a different relay host or port reproducibly.
+- Regression coverage for prefixed and absolute Swarm paths, token isolation, prefix stripping,
+  identity forwarding and relay-root API routing. The deployed smoke test checks unauthenticated
+  rejection and, when Swarm is configured, both URL forms plus an empty fan-out `warnings` array.
+- Operations guidance for the nested `swarm-<host>: 401 Unauthorized` case: HTTP responses from
+  Caddy and the relay may all be 200 while the JSON warning reports that a registered node's
+  `swarm.join[].token` does not match its own `httpserver.auth_token`. The guide covers the common
+  self-node environment mismatch and safe hash/length-only diagnosis.
+
+### Security
+
+- Documented the Swarm credential boundary: the relay client token, registration pairing token
+  and per-node HTTP token are separate credentials. Neither caller/Keycloak tokens nor Coddy's
+  API token are forwarded to the relay, and the relay token is never forwarded to Coddy.
+
+### Fixed
+
+- The SSE smoke check now tolerates ordinary activity events arriving before
+  `coddy.events_ready` instead of assuming the ready marker fits in the first 300 bytes.
+
 ## [1.1.0] - 2026-09-24
 
 Proven on the reference deployment against Coddy 1.2.12: the existing site was

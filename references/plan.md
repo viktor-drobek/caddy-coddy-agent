@@ -29,6 +29,10 @@ One message with every open question; skip what the user already said.
    belongs to. The bot token is read from `gateways.telegram.token` of the local Coddy config when
    this machine is the Coddy host, otherwise the user exports `TG_BOT_TOKEN`; the Mini App URL to
    set in BotFather is `<public_url>/tg/`.
+8. **Swarm Relay** (optional). Does this Coddy host also run a relay? Record its `host:port` as
+   seen from the edge (default: the Coddy backend host on port 12346) and confirm that
+   `swarm.auth_token` is set. Its value is entered privately as `CODDY_SWARM_TOKEN`; never ask the
+   user to paste it into chat.
 
 ## 2. Decide and explain
 
@@ -57,6 +61,7 @@ Wait for agreement or corrections before step 3.
 CC=<skill dir>
 python3 "$CC/scripts/manifest.py" -f <project>/caddy-coddy.yml init \
   --public-host meet.example.com --edge-ssh ops@edge.example.com --coddy-backend 10.0.0.5:12345 \
+  --swarm-relay-backend 10.0.0.5:12346 \
   --edge-name edge --coddy-host-name workstation --initial-user alice \
   --telegram-user-ids 123456789                                            # optional; the rest has defaults
 bash "$CC/scripts/preflight.sh" <project>
@@ -80,6 +85,7 @@ Flat `key: value` lines; `examples/caddy-coddy.yml` shows a complete file.
 | `edge_dir` | default `/opt/caddy-coddy` | Project directory on the edge (rsync target, compose project) |
 | `edge_name` | default: host part of `edge_ssh` | Short name used in comments and documentation |
 | `coddy_backend` | yes | `host:port` of `coddy serve` **as seen from the edge** |
+| `swarm_relay_backend` | default `<coddy_backend host>:12346` | optional Swarm Relay `host:port` as seen from the edge |
 | `coddy_host_name` | default: host part of `coddy_backend` | Short name used in comments and documentation |
 | `coddy_local_url` | default `http://127.0.0.1:<port>` | `coddy serve` as seen from the machine running the tools |
 | `initial_user` | default empty | First user of realm `coddy` (temporary password, change forced) |

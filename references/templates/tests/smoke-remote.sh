@@ -46,6 +46,8 @@ contains "page load redirects to /oauth2/start" "/oauth2/start?rd=" "$(redirect 
 expect "XHR without session -> 401 (no redirect)" 401 "$(code -H 'Accept: application/json' $URL/coddy/sessions)"
 expect "EventSource without session -> 401" 401 "$(code -H 'Accept: text/event-stream' $URL/coddy/events)"
 expect "junk bearer -> 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/coddy/sessions)"
+expect "swarm absolute path without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm/info)"
+expect "swarm relay prefix without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
 expect "keycloak admin console anonymous -> 302" 302 "$(code -H 'Accept: text/html' $URL/auth/admin/master/console/)"
 expect "keycloak admin API anonymous -> 302" 302 "$(code -H 'Accept: application/json' $URL/auth/admin/realms)"
 expect "master realm anonymous -> 302" 302 "$(code $URL/auth/realms/master/.well-known/openid-configuration)"
@@ -66,8 +68,23 @@ contains "callback lands on / with 200" "200 $URL/" "$(cat $TMP/final)"
 contains "Coddy web UI served" "<title>Coddy Agent</title>" "$(cat $TMP/root.html)"
 contains "/coddy/auth/me authenticated via cookie" '"authenticated":true' "$($C -H 'Accept: application/json' $URL/coddy/auth/me)"
 expect "/coddy/sessions via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/coddy/sessions)"
-contains "SSE /coddy/events streams" "coddy.events_ready" "$(timeout 5 $C -N -H 'Accept: text/event-stream' $URL/coddy/events 2>/dev/null | head -c 300)"
+# Activity from another live session may precede the ready marker. Keep enough of
+# the initial stream to see the marker instead of assuming it is the first event.
+contains "SSE /coddy/events streams" "coddy.events_ready" "$(timeout 5 $C -N -H 'Accept: text/event-stream' $URL/coddy/events 2>/dev/null | head -c 4096)"
 expect "keycloak admin console with Coddy cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' $URL/auth/admin/master/console/)"
+if [ -z "${CODDY_SWARM_TOKEN:-}" ]; then
+  echo "SKIP swarm relay: CODDY_SWARM_TOKEN not set in .env"
+else
+  expect "swarm absolute /swarm/info via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm/info)"
+  expect "swarm prefixed /swarm/info via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
+  expect "swarm remote root /v1/models via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
+  SWARM_SESSIONS=/tmp/coddy-smoke/swarm-sessions.json
+  expect "swarm sessions fan-out -> 200" 200 "$($C -o "$SWARM_SESSIONS" -w '%{http_code}' -H 'Accept: application/json' "$URL/swarm/sessions?limit=1")"
+  SHAPE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("valid" if d.get("object") == "swarm.session_list" and isinstance(d.get("warnings"), list) else "invalid")' "$SWARM_SESSIONS" 2>/dev/null || echo invalid)
+  expect "swarm sessions response has a warnings array" valid "$SHAPE"
+  WARNINGS=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["warnings"]))' "$SWARM_SESSIONS" 2>/dev/null || echo invalid)
+  expect "swarm fan-out has no node warnings" 0 "$WARNINGS"
+fi
 $C -o /dev/null "$URL/oauth2/sign_out?rd=$URL/"
 expect "after sign_out page load -> 302 again" 302 "$($C -o /dev/null -w '%{http_code}' $URL/)"
 

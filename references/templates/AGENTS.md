@@ -17,8 +17,8 @@ project's tests and run them after every change (`/caddy-coddy validate`, `deplo
 | Path | What it is |
 | --- | --- |
 | `caddy-coddy.yml` | Site manifest: hosts, addresses, first user, `keep:` list, and the Coddy version of the last smoke-test pass |
-| `Caddyfile` | Edge routing: `/auth/*` → Keycloak, `/oauth2/*` → oauth2-proxy, `/*` → `forward_auth` + reverse proxy to Coddy with the Authorization header swapped to Coddy's own token |
-| `docker-compose.yml` | Four services on @@EDGE_NAME@@: `caddy` (host network, `:443`), `keycloak` + `keycloak-db`, `oauth2-proxy`; the last three publish on `127.0.0.1` only |
+| `Caddyfile` | Edge routing: `/auth/*` → Keycloak, `/oauth2/*` → oauth2-proxy, `/swarm/*` → the optional Swarm Relay with its client token, `/*` → `forward_auth` + reverse proxy to Coddy with the Authorization header swapped to Coddy's own token |
+| `docker-compose.yml` | Five services on @@EDGE_NAME@@: `caddy` (host network, `:443`), `keycloak` + `keycloak-db`, `oauth2-proxy`, `tg-auth`; Keycloak, oauth2-proxy and tg-auth publish on `127.0.0.1` only |
 | `.env.example` | Every address and secret; the real `.env` lives only on @@EDGE_NAME@@ (`@@EDGE_DIR@@/.env`) and is never committed |
 | `keycloak/import/realm-coddy.json` | Realm `coddy` with clients `coddy-web`, `coddy-service`, `coddy-cli`; imported only when the realm does not exist yet |
 | `keycloak/bootstrap.sh` | Idempotent post-start configuration: client secrets from `.env`, `coddy-cli` if missing, `VERIFY_PROFILE` off, theme, first user |
@@ -53,6 +53,11 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
 8. Telegram sign-in admits only verified `initData` (HMAC with the bot token, at most an hour
    old) of a user in `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody, and the
    `/tg/auth/verify` endpoint is never public.
+9. Swarm credentials stay isolated: Caddy sends `CODDY_SWARM_TOKEN` only to
+   `SWARM_RELAY_BACKEND` for `/swarm/*`, while `/swarm-relay/coddy/*` and
+   `/swarm-relay/v1/*` use `CODDY_API_TOKEN` and the ordinary Coddy backend. Every node's
+   `swarm.join[].token` must equal its own `httpserver.auth_token`; otherwise the node remains
+   visible but fan-out responses contain `<node>: 401 Unauthorized` warnings.
 
 ## Working on the stack
 

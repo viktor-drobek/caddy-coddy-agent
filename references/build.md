@@ -18,7 +18,7 @@ the executable bits.
 | `oauth2-proxy/oauth2-proxy.toml` | 2, oauth2-proxy | OIDC client settings, bearer-token acceptance, cookie and CSRF settings |
 | `tg-auth/server.py` | 2, Telegram sign-in | Verifies Telegram Mini App `initData`, allow list, `_coddy_tg` cookie, `/tg/auth/verify` for Caddy |
 | `Caddyfile` | 3, edge | Routing, `forward_auth`, header swap, security headers |
-| `docker-compose.yml` | 3 | Four services; only Caddy is public |
+| `docker-compose.yml` | 3 | Five services; only Caddy is public |
 | `deploy.sh`, `add-user.sh`, `remove-user.sh`, `list-users.sh`, `add-service.sh`, `coddy-login.sh`, `sync-coddy-token.sh` | 4, operations | Operator tools with the site's addresses as defaults |
 | `tests/smoke.sh`, `tests/smoke-remote.sh` | 4 | End-to-end test; `--record` writes `coddy_version` into the manifest |
 | `README.md`, `AGENTS.md`, `.gitignore` | documentation | The site's documentation for people and for agents that open the project |

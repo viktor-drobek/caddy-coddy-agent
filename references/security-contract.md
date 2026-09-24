@@ -1,6 +1,6 @@
 # The security contract (do not drift)
 
-Seven invariants make the stack work. Each has been broken by a plausible edit before; keep them
+Nine invariants make the stack work. Each has been broken by a plausible edit before; keep them
 when changing `Caddyfile`, `oauth2-proxy/oauth2-proxy.toml`, `docker-compose.yml` or anything
 under `keycloak/`.
 
@@ -35,6 +35,15 @@ under `keycloak/`.
    `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody. Its cookie is signed with
    `TG_AUTH_COOKIE_SECRET`, `/tg/auth/verify` answers 404 to the internet, identity headers come
    only from the verify response, and the Coddy token swap applies as for every other caller.
+9. **Swarm credentials stay in their own lanes.** `/swarm-relay/swarm/*` (with the prefix
+   removed) and absolute `/swarm/*` go to `SWARM_RELAY_BACKEND` only after oauth2-proxy accepts
+   the browser session; Caddy removes any caller `Authorization` and sends
+   `Bearer <CODDY_SWARM_TOKEN>`. `/swarm-relay/coddy/*` and `/swarm-relay/v1/*` instead go to
+   `CODDY_BACKEND` with `CODDY_API_TOKEN`, because they describe the relay host's own Coddy API.
+   The relay client token must never reach Coddy, and Coddy's HTTP token must never be used as the
+   relay client token. Inside the swarm, every `swarm.join[].token` must match that node's own
+   `httpserver.auth_token`; a mismatch leaves the node visible but degrades fan-out responses with
+   `<node>: 401 Unauthorized` warnings.
 
 Also load-bearing:
 

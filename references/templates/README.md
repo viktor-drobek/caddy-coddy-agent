@@ -11,6 +11,8 @@ with **Keycloak** as the identity provider.
         │  /auth/*   ──────────────► Keycloak :8080 (+ Postgres)   realm "coddy"
         │  /oauth2/* ──────────────► oauth2-proxy :4180
         │  /tg/*     ──────────────► tg-auth :4181 (Telegram Mini App sign-in)
+        │  /swarm/*  ──────────────► coddy swarm :12346
+        │      Authorization := "Bearer CODDY_SWARM_TOKEN"
         │  /*  forward_auth ───────► oauth2-proxy /oauth2/auth
         │      then reverse_proxy, Authorization := "Bearer CODDY_API_TOKEN"
         └───────────┬───────────┘
@@ -33,13 +35,15 @@ Coddy's own sign-in screen is never shown through the proxy: with the bearer
 token present, `GET /coddy/auth/me` reports `authenticated: true`. Coddy's
 password login stays enabled for direct access to `:@@CODDY_BACKEND_PORT@@` on its own host.
 
-**Two kinds of token, never mixed up.** People and services only ever hold
+**Backend tokens are never mixed up.** People and services only ever hold
 *Keycloak* tokens (browser session, `coddy-cli` password grant, `coddy-service`
 client credentials). *Coddy's* own API token (`httpserver.auth_token`, copied
 into `.env` as `CODDY_API_TOKEN`) exists only in Coddy's config on @@CODDY_HOST_NAME@@ and in
 Caddy's environment on @@EDGE_NAME@@; Caddy replaces the incoming Keycloak token with
 it on every proxied request. Nobody needs to know it to use Coddy. When it
 changes in Coddy's config, `./sync-coddy-token.sh` copies it to the proxy.
+The optional Swarm Relay has its own client credential (`swarm.auth_token`,
+copied as `CODDY_SWARM_TOKEN`): Caddy sends it only to `SWARM_RELAY_BACKEND`.
 
 Only page loads (`Accept: text/html`) without a valid cookie are redirected to
 `/oauth2/start` and on to the Keycloak login page. The UI's own XHR/SSE calls
@@ -62,7 +66,7 @@ dark card with Coddy branding and no vendor branding.
 | Path | Purpose |
 | --- | --- |
 | `caddy-coddy.yml` | Site manifest: the hosts and addresses this project was rendered for, and the Coddy version it last passed the smoke test against. Read by the caddy-coddy agent (`/caddy-coddy`) |
-| `Caddyfile` | Routing, forward_auth, header rewrite |
+| `Caddyfile` | Routing, forward_auth, Coddy and Swarm header rewrites |
 | `docker-compose.yml` | caddy, keycloak, keycloak-db, oauth2-proxy (all on @@EDGE_NAME@@) |
 | `.env.example` | Every address and secret the stack needs; the real `.env` lives only on @@EDGE_NAME@@ |
 | `keycloak/import/realm-coddy.json` | Realm `coddy`, clients `coddy-web` (browser login), `coddy-service` (example machine client with the audience mapper) and `coddy-cli`. Imported on first start. |
@@ -94,6 +98,9 @@ agent creates it (`/caddy-coddy deploy` runs `init-env.sh`, which fills
 it in: `CODDY_API_TOKEN` is `httpserver.auth_token` from
 `@@CODDY_HOST_NAME@@:~/.coddy/config.yaml`, every other secret is random
 (`openssl rand -hex 32`).
+
+If Coddy also runs a Swarm Relay, fill `CODDY_SWARM_TOKEN` with that relay's
+`swarm.auth_token`. Leave it empty when Swarm is not used.
 
 Keycloak takes about a minute to start; `deploy.sh` waits for its health check
 before running `bootstrap.sh`. Confidential clients are imported disabled, with
@@ -166,6 +173,29 @@ browser (a stale one sends page loads back to `/tg/`, where Telegram signs in
 again; outside Telegram the page offers the username/password login). To
 remove a person, take the id out of the list and redeploy; to end every
 Telegram session at once, rotate `TG_AUTH_COOKIE_SECRET`.
+
+## Swarm Relay
+
+Set `CODDY_SWARM_TOKEN` in the edge `.env` to the relay's `swarm.auth_token`, then run
+`./deploy.sh`. Configure the Coddy UI remote as `@@PUBLIC_URL@@/swarm-relay`. Caddy accepts the
+browser's Keycloak session, strips the caller's `Authorization`, and sends the relay token only to
+the Swarm backend. After the UI recognises the relay it may use absolute `/swarm/*` paths; those
+are routed to the same backend. Requests under `/swarm-relay/coddy/*` and
+`/swarm-relay/v1/*` describe the relay host's own Coddy API and therefore use
+`CODDY_API_TOKEN` instead.
+
+### `swarm-<host>: 401 Unauthorized` despite HTTP 200
+
+Inspect the JSON `warnings` field of `/swarm/sessions` or `/swarm/topology`. If it contains a
+node-specific `401`, Caddy and the relay client token are already working: the relay cannot
+authenticate to that node. The node's `swarm.join[].token` must equal its own
+`httpserver.auth_token`.
+
+For a self-node, both settings commonly reference `${CODDY_HTTP_TOKEN}`. Make sure that variable
+is present in the private env source used for config interpolation, not only in a service-manager
+override, then restart Coddy so it re-registers. Verify that `warnings` is empty and
+`/swarm/nodes/<name>/coddy/auth/me` returns 200 through the relay. Compare token hashes or lengths
+only; never print the credentials.
 
 ## Is the Keycloak admin API reachable from the internet?
 

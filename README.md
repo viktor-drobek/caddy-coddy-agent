@@ -5,13 +5,16 @@ address with real logins: **Caddy** (TLS, routing) + **Keycloak** (users, realm 
 page) + **oauth2-proxy** (OIDC client, session cookie, bearer-token check), deployed with Docker
 Compose to a host you choose, over ssh. Browsers log in at Keycloak; scripts and services use
 Keycloak tokens; allow-listed Telegram users can open Coddy as a Telegram Mini App; Coddy's own
-API token never leaves the proxy.
+API token never leaves the proxy. When Coddy also runs a Swarm Relay, authenticated browsers can
+use it without learning its client token.
 
 ```
 internet ── https://<public_host> ──► Caddy :443 (edge host)
                                          ├── /auth/*    → Keycloak
                                          ├── /oauth2/*  → oauth2-proxy
                                          ├── /tg/*      → tg-auth (Telegram Mini App sign-in)
+                                         ├── /swarm/*   → swarm relay
+                                         │      Authorization := "Bearer <CODDY_SWARM_TOKEN>"
                                          └── /*  forward_auth → oauth2-proxy → reverse_proxy → coddy serve
                                                 Authorization := "Bearer <CODDY_API_TOKEN>"
 ```
@@ -90,17 +93,18 @@ a source archive. CI runs `make check`, shellcheck and a real `docker compose co
 
 ```bash
 make check                  # what CI runs
-make bump VERSION=1.1.0     # manifest.yml + SKILL.md, opens a CHANGELOG.md section
+make bump VERSION=1.2.0     # manifest.yml + SKILL.md, opens a CHANGELOG.md section
 make release                # tags v<version>; then: git push origin main v<version>
-coddy skills add viktor-drobek/caddy-coddy-agent@v1.0.3   # pin a release
+coddy skills add viktor-drobek/caddy-coddy-agent@v1.2.0   # pin a release
 ```
 
 ## Security contract
 
-Seven invariants the templates encode and the skill refuses to drift from, spelled out in
+Nine invariants the templates encode and the skill refuses to drift from, spelled out in
 `references/security-contract.md`. In short: Coddy's token stays in the proxy, only page loads are
 redirected to the login, issuer and audience are verified, secrets stay out of git, users live in
-realm `coddy`, the Keycloak admin API sits behind the login, and deploys wait for Keycloak's health.
+realm `coddy`, the Keycloak admin API sits behind the login, deploys wait for Keycloak's health,
+Telegram sign-in fails closed, and Swarm client/per-node tokens stay isolated.
 
 ## Local regression checks
 
