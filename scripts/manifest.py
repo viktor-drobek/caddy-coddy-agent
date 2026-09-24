@@ -41,6 +41,7 @@ FIELDS = [
     ("coddy_backend", "coddy serve address as seen from the edge (host:port; 127.0.0.1:PORT when both share one host).", None),
     ("coddy_local_url", "coddy serve URL as seen from the machine running the tools (init-env.sh, sync-coddy-token.sh).", ""),
     ("initial_user", "First user of realm coddy, created with a temporary password (empty: none).", ""),
+    ("telegram_user_ids", "Telegram user ids allowed to open Coddy as a Telegram Mini App, comma-separated (empty: Telegram sign-in off).", ""),
     ("keep", "Comma-separated rendered paths that build creates once and never overwrites.", ""),
     ("coddy_version", "Coddy version the deployed stack last passed tests/smoke.sh against (written by verify --record).", ""),
     ("verified_at", "UTC time of that pass (written by verify --record).", ""),
@@ -54,6 +55,7 @@ SSH_RE = re.compile(r"^([A-Za-z0-9._-]+@)?[A-Za-z0-9._-]+$")
 BACKEND_RE = re.compile(r"^([A-Za-z0-9._-]+):([0-9]{1,5})$")
 URL_RE = re.compile(r"^https?://[^\s/]+$")
 USER_RE = re.compile(r"^[A-Za-z0-9._@-]*$")
+TG_IDS_RE = re.compile(r"^([0-9]+(,[0-9]+)*)?$")
 
 
 class ManifestError(Exception):
@@ -128,6 +130,9 @@ def derive(values: dict[str, str]) -> dict[str, str]:
     if not USER_RE.match(v["initial_user"]):
         raise ManifestError(f"initial_user {v['initial_user']!r}: letters, digits and . _ @ - only")
 
+    v["telegram_user_ids"] = ",".join(p.strip() for p in v.get("telegram_user_ids", "").split(",") if p.strip())
+    if not TG_IDS_RE.match(v["telegram_user_ids"]):
+        raise ManifestError(f"telegram_user_ids {v['telegram_user_ids']!r}: numeric Telegram user ids separated by commas")
     keep = [p.strip() for p in v.get("keep", "").split(",") if p.strip()]
     for path in keep:
         if path.startswith("/") or ".." in path.split("/"):
@@ -186,6 +191,7 @@ def cmd_init(args) -> int:
         "coddy_backend": args.coddy_backend,
         "coddy_local_url": args.coddy_local_url or "",
         "initial_user": args.initial_user or "",
+        "telegram_user_ids": args.telegram_user_ids or "",
         "keep": args.keep or "",
         "coddy_version": "",
         "verified_at": "",
@@ -267,7 +273,7 @@ def main(argv=None) -> int:
     p_init.add_argument("--public-host", required=True)
     p_init.add_argument("--edge-ssh", required=True)
     p_init.add_argument("--coddy-backend", required=True)
-    for option in ("--public-url", "--edge-dir", "--edge-name", "--coddy-host-name", "--coddy-local-url", "--initial-user", "--keep"):
+    for option in ("--public-url", "--edge-dir", "--edge-name", "--coddy-host-name", "--coddy-local-url", "--initial-user", "--telegram-user-ids", "--keep"):
         p_init.add_argument(option)
     p_init.add_argument("--force", action="store_true")
     p_init.set_defaults(func=cmd_init)

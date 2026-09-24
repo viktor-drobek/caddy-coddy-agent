@@ -2,7 +2,7 @@
 # Written by `/caddy-coddy plan` (manifest.py init); read by build, deploy and verify.
 # Flat `key: value` lines only, so shell and Python read it without a YAML library.
 # Version of the caddy-coddy agent that wrote this file.
-agent_version: 1.0.0
+agent_version: 1.1.0
 # Public DNS name of the site; its A/AAAA record points at the edge, or at a NAT that forwards 80/443 to it.
 public_host: meet.example.com
 # Public origin without a path; the OIDC issuer is <public_url>/auth/realms/coddy.
@@ -21,6 +21,8 @@ coddy_backend: 10.0.0.5:12345
 coddy_local_url: http://127.0.0.1:12345
 # First user of realm coddy, created with a temporary password (empty: none).
 initial_user: alice
+# Telegram user ids allowed to open Coddy as a Telegram Mini App, comma-separated (empty: Telegram sign-in off).
+telegram_user_ids:
 # Comma-separated rendered paths that build creates once and never overwrites.
 keep:
 # Coddy version the deployed stack last passed tests/smoke.sh against (written by verify --record).

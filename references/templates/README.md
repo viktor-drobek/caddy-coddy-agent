@@ -10,6 +10,7 @@ with **Keycloak** as the identity provider.
         │ Caddy :443 (host net) │
         │  /auth/*   ──────────────► Keycloak :8080 (+ Postgres)   realm "coddy"
         │  /oauth2/* ──────────────► oauth2-proxy :4180
+        │  /tg/*     ──────────────► tg-auth :4181 (Telegram Mini App sign-in)
         │  /*  forward_auth ───────► oauth2-proxy /oauth2/auth
         │      then reverse_proxy, Authorization := "Bearer CODDY_API_TOKEN"
         └───────────┬───────────┘
@@ -26,6 +27,7 @@ with **Keycloak** as the identity provider.
 | Browser | oauth2-proxy session cookie, obtained by logging in at Keycloak with username + password | oauth2-proxy (`/oauth2/auth`) | `Authorization: Bearer <CODDY_API_TOKEN>` |
 | Service | `Authorization: Bearer <Keycloak access token>` from the OAuth2 client_credentials grant (client `coddy-service`) | oauth2-proxy verifies the JWT: signature (Keycloak JWKS), issuer `@@PUBLIC_URL@@/auth/realms/coddy`, audience `coddy-web` | `Authorization: Bearer <CODDY_API_TOKEN>` |
 | Person from a script / CLI | `Authorization: Bearer <Keycloak access token>` from the password grant on the public client `coddy-cli` (7-day token) | same JWT checks | `Authorization: Bearer <CODDY_API_TOKEN>` |
+| Telegram Mini App | `_coddy_tg` cookie, issued after Telegram's signed `initData` was verified and the Telegram user id found in `TG_ALLOWED_USER_IDS` | tg-auth (`/tg/auth/verify`) | `Authorization: Bearer <CODDY_API_TOKEN>` |
 
 Coddy's own sign-in screen is never shown through the proxy: with the bearer
 token present, `GET /coddy/auth/me` reports `authenticated: true`. Coddy's
@@ -75,6 +77,7 @@ dark card with Coddy branding and no vendor branding.
 | `sync-coddy-token.sh` | For the operator: copy Coddy's `httpserver.auth_token` from its config on @@CODDY_HOST_NAME@@ into the proxy `.env` and restart Caddy |
 | `tests/smoke.sh` | End-to-end test of every access path; `--record` writes the Coddy version it passed against into `caddy-coddy.yml` |
 | `oauth2-proxy/oauth2-proxy.toml` | OIDC client settings, bearer-token acceptance, cookie |
+| `tg-auth/server.py` | Telegram Mini App sign-in: verifies Telegram's signed `initData`, allow list of Telegram user ids, `_coddy_tg` session cookie, Caddy's `/tg/auth/verify` |
 | `deploy.sh` | rsync to @@EDGE_NAME@@ `@@EDGE_DIR@@`, `docker compose up -d`, run bootstrap |
 
 ## Deploy
@@ -133,6 +136,36 @@ clears the proxy session at once (the next page load asks for a login again),
 then lands on a Keycloak page asking to confirm the logout; confirming ends the
 Keycloak SSO session too. Without that confirmation the next login is silent
 (Keycloak still remembers the user).
+
+## Telegram Mini App
+
+Coddy can be opened as a Telegram Mini App by the people listed in
+`TG_ALLOWED_USER_IDS`, without a Keycloak account: Telegram signs the app's
+`initData` with the bot's token, `tg-auth` verifies that signature, checks the
+user id against the list and sets the `_coddy_tg` cookie; from then on Caddy
+checks every request at `tg-auth` instead of oauth2-proxy and forwards it to
+Coddy with the same `CODDY_API_TOKEN` swap. Coddy sees `X-Forwarded-User` set
+to the Telegram username.
+
+Setup:
+
+1. `.env` on @@EDGE_NAME@@: `TG_BOT_TOKEN` (the bot the Mini App belongs to; the
+   caddy-coddy agent copies it from `gateways.telegram.token` of the local Coddy
+   config when it creates `.env`), `TG_ALLOWED_USER_IDS` (numeric Telegram user
+   ids, comma-separated; `@userinfobot` tells you yours), `TG_AUTH_COOKIE_SECRET`
+   (`openssl rand -hex 32`). Then `./deploy.sh`.
+2. In [@BotFather](https://t.me/BotFather): *Bot Settings → Menu Button* (or
+   `/newapp`) with the URL `@@PUBLIC_URL@@/tg/`.
+3. Open the bot's menu button in Telegram: the landing page signs in and lands
+   on the Coddy UI. Sessions last 7 days; `@@PUBLIC_URL@@/tg/logout` ends one.
+
+Rules: an empty `TG_BOT_TOKEN` turns the whole path off (`/tg/` answers 404),
+an empty list admits nobody, `initData` older than an hour is rejected, and the
+`_coddy_tg` cookie takes precedence over a Keycloak session in the same
+browser (a stale one sends page loads back to `/tg/`, where Telegram signs in
+again; outside Telegram the page offers the username/password login). To
+remove a person, take the id out of the list and redeploy; to end every
+Telegram session at once, rotate `TG_AUTH_COOKIE_SECRET`.
 
 ## Is the Keycloak admin API reachable from the internet?
 

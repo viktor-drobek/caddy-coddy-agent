@@ -190,7 +190,14 @@ class ProxyTest(SiteFixture):
 
             def do_GET(self):
                 requests.append((self.path, self.command, dict(self.headers)))
-                if self.path == "/oauth2/auth":
+                if self.path == "/tg/auth/verify":
+                    good = "_coddy_tg=valid" in self.headers.get("Cookie", "")
+                    self.send_response(202 if good else 401)
+                    if good:
+                        self.send_header("X-Auth-Request-User", "tg:42")
+                        self.send_header("X-Auth-Request-Preferred-Username", "tguser")
+                    self.end_headers()
+                elif self.path == "/oauth2/auth":
                     good = self.headers.get("Cookie") == "session=valid" or self.headers.get("Authorization") == "Bearer valid"
                     self.send_response(202 if good else 401)
                     self.send_header("Set-Cookie", "session=refreshed; Path=/" if good else "session=; Max-Age=0; Path=/")
@@ -221,7 +228,8 @@ class ProxyTest(SiteFixture):
             "https://review.example.com", f"http://127.0.0.1:{self.port}"))
         self.env.update(CODDY_BACKEND=f"127.0.0.1:{server.server_port}",
                         KEYCLOAK_BACKEND=f"127.0.0.1:{server.server_port}",
-                        OAUTH2_PROXY_BACKEND=f"127.0.0.1:{server.server_port}", CODDY_API_TOKEN="test-coddy-token",
+                        OAUTH2_PROXY_BACKEND=f"127.0.0.1:{server.server_port}", TG_AUTH_BACKEND=f"127.0.0.1:{server.server_port}",
+                        CODDY_API_TOKEN="test-coddy-token",
                         XDG_CONFIG_HOME=str(self.base), XDG_DATA_HOME=str(self.base))
         log = (self.base / "caddy.log").open("w+")
         self.addCleanup(log.close)
@@ -302,6 +310,104 @@ class ProxyTest(SiteFixture):
         self.assertEqual(status, 200)
         self.assertNotIn("Authorization", self.requests[-2][2])
         self.assertEqual(json.loads(body)["headers"]["Authorization"], "Bearer master-token")
+
+    def test_telegram_cookie_session(self):
+        status, _, body = self.request("/coddy/sessions", {"Cookie": "_coddy_tg=valid", "Authorization": "Bearer mallory",
+                                                            "X-Auth-Request-User": "mallory"})
+        self.assertEqual(status, 200)
+        upstream = json.loads(body)["headers"]
+        self.assertEqual(upstream["Authorization"], "Bearer test-coddy-token")
+        self.assertEqual(upstream["X-Forwarded-User"], "tguser")
+        self.assertEqual(upstream["X-Auth-Request-User"], "tg:42")
+        self.assertNotIn("X-Auth-Request-Email", upstream)
+
+    def test_telegram_cookie_precedes_and_fails_closed(self):
+        status, headers, _ = self.request("/", {"Cookie": "_coddy_tg=stale; session=valid", "Accept": "text/html"})
+        self.assertEqual(status, 302)
+        self.assertTrue(dict(headers)["Location"].startswith("/tg/?rd="))
+        status, _, _ = self.request("/coddy/sessions", {"Cookie": "_coddy_tg=stale"})
+        self.assertEqual(status, 401)
+
+    def test_telegram_endpoints(self):
+        self.assertEqual(self.request("/tg/auth/verify", {"Cookie": "_coddy_tg=valid"})[0], 404)
+        status, _, body = self.request("/tg/")
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["method"], "GET")
+
+
+class TgAuthTest(unittest.TestCase):
+    """tg-auth (references/templates/tg-auth/server.py) on a loopback port with real signed initData."""
+    TOKEN = "123456:TEST-BOT-TOKEN"
+
+    def start(self, **env_overrides):
+        env = dict(os.environ, TG_BOT_TOKEN=self.TOKEN, TG_ALLOWED_USER_IDS="42,7", TG_AUTH_COOKIE_SECRET="s3cret",
+                   TG_LISTEN="127.0.0.1:0")
+        env.update(env_overrides)
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        env["TG_LISTEN"] = f"127.0.0.1:{port}"
+        log = tempfile.TemporaryFile(mode="w+")
+        self.addCleanup(log.close)
+        proc = subprocess.Popen(["python3", str(ROOT / "references/templates/tg-auth/server.py")], env=env,
+                                stdout=log, stderr=log)
+        self.addCleanup(proc.wait, timeout=5)
+        self.addCleanup(proc.terminate)
+        for _ in range(100):
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.1):
+                    return port
+            except OSError:
+                time.sleep(0.05)
+        log.seek(0)
+        self.fail(log.read())
+
+    def init_data(self, uid, skew=0, broken=False):
+        import hashlib, hmac, urllib.parse
+        fields = {"user": json.dumps({"id": uid, "first_name": "T", "username": "tgtester"}, separators=(",", ":")),
+                  "auth_date": str(int(time.time()) - skew), "query_id": "q"}
+        check = "\n".join(f"{k}={v}" for k, v in sorted(fields.items()))
+        secret = hmac.new(b"WebAppData", self.TOKEN.encode(), hashlib.sha256).digest()
+        fields["hash"] = "0" * 64 if broken else hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+        return urllib.parse.urlencode(fields)
+
+    def call(self, port, method, path, body=None, headers=None):
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        try:
+            connection.request(method, path, body=body, headers=headers or {})
+            response = connection.getresponse()
+            return response.status, dict(response.getheaders()), response.read()
+        finally:
+            connection.close()
+
+    def test_login_verify_and_refusals(self):
+        port = self.start()
+        self.assertEqual(self.call(port, "GET", "/tg/healthz")[0], 200)
+        self.assertIn(b"telegram-web-app.js", self.call(port, "GET", "/tg/")[2])
+        status, headers, body = self.call(port, "POST", "/tg/auth/login", self.init_data(42))
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["username"], "tgtester")
+        cookie = headers["Set-Cookie"].split(";")[0]
+        self.assertTrue(cookie.startswith("_coddy_tg="))
+        self.assertIn("HttpOnly", headers["Set-Cookie"])
+        status, headers, _ = self.call(port, "GET", "/tg/auth/verify", headers={"Cookie": cookie})
+        self.assertEqual(status, 202)
+        self.assertEqual(headers["X-Auth-Request-User"], "tg:42")
+        self.assertEqual(headers["X-Auth-Request-Preferred-Username"], "tgtester")
+        self.assertEqual(self.call(port, "GET", "/tg/auth/verify", headers={"Cookie": cookie + "x"})[0], 401)
+        self.assertEqual(self.call(port, "GET", "/tg/auth/verify")[0], 401)
+        self.assertEqual(self.call(port, "POST", "/tg/auth/login", self.init_data(99))[0], 403)
+        self.assertEqual(self.call(port, "POST", "/tg/auth/login", self.init_data(42, broken=True))[0], 401)
+        self.assertEqual(self.call(port, "POST", "/tg/auth/login", self.init_data(42, skew=7200))[0], 401)
+        status, headers, _ = self.call(port, "GET", "/tg/logout")
+        self.assertEqual(status, 302)
+        self.assertIn("Max-Age=0", headers["Set-Cookie"])
+
+    def test_disabled_without_bot_token(self):
+        port = self.start(TG_BOT_TOKEN="")
+        self.assertEqual(self.call(port, "GET", "/tg/")[0], 404)
+        self.assertEqual(self.call(port, "POST", "/tg/auth/login", self.init_data(42))[0], 503)
+        self.assertEqual(self.call(port, "GET", "/tg/auth/verify", headers={"Cookie": "_coddy_tg=x.y"})[0], 401)
 
 
 if __name__ == "__main__":

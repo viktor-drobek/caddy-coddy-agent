@@ -7,8 +7,8 @@
 #
 # Network model:
 #   - caddy: host network, binds :443 (and :80 for ACME redirects).
-#   - keycloak, keycloak-db, oauth2-proxy: private bridge network. Only
-#     keycloak :8080 and oauth2-proxy :4180 are published, on 127.0.0.1, so
+#   - keycloak, keycloak-db, oauth2-proxy, tg-auth: private bridge network. Only
+#     keycloak :8080, oauth2-proxy :4180 and tg-auth :4181 are published, on 127.0.0.1, so
 #     Caddy (host network) can reach them and nothing else can.
 #   - oauth2-proxy talks to Keycloak directly (http://keycloak:8080) for the
 #     token/JWKS/userinfo back-channel; only the browser-facing login URL is
@@ -132,6 +132,31 @@ services:
       timeout: 3s
       retries: 5
       start_period: 10s
+
+  tg-auth:
+    # Telegram Mini App sign-in: verifies Telegram's signed initData with the bot
+    # token, admits TG_ALLOWED_USER_IDS, issues the _coddy_tg cookie and answers
+    # Caddy's /tg/auth/verify. Standard library only, so the plain python image.
+    # Empty TG_BOT_TOKEN keeps it running but disabled (404/503 on /tg/).
+    image: python:3.12-alpine
+    container_name: tg-auth
+    restart: unless-stopped
+    command: ["python3", "-u", "/app/server.py"]
+    environment:
+      TG_BOT_TOKEN: ${TG_BOT_TOKEN:-}
+      TG_ALLOWED_USER_IDS: ${TG_ALLOWED_USER_IDS:-}
+      TG_AUTH_COOKIE_SECRET: ${TG_AUTH_COOKIE_SECRET:?TG_AUTH_COOKIE_SECRET is required (see .env.example)}
+    ports:
+      - "127.0.0.1:4181:4181"
+    volumes:
+      # Directory mount so a replaced file is visible; deploy.sh restarts on change.
+      - ./tg-auth:/app:ro
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4181/tg/healthz', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   caddy_data:

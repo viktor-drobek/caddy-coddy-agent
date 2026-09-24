@@ -8,6 +8,35 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.1.0] - 2026-09-24
+
+### Added
+
+- **Telegram Mini App sign-in.** New service `tg-auth` (`tg-auth/server.py`,
+  standard-library Python in the plain `python:3.12-alpine` image, loopback
+  port 4181): verifies Telegram's signed `initData` with the bot token
+  (`TG_BOT_TOKEN`), admits only the Telegram user ids in
+  `TG_ALLOWED_USER_IDS`, issues the signed `_coddy_tg` cookie and answers
+  Caddy's `/tg/auth/verify`. Caddy serves the landing page at `/tg/` and
+  checks requests carrying the cookie at tg-auth instead of oauth2-proxy, with
+  the same Coddy token swap. Empty token or list admits nobody; `initData`
+  older than an hour is rejected; the verify endpoint is not public.
+- Manifest key `telegram_user_ids` (`--telegram-user-ids`), env keys
+  `TG_AUTH_BACKEND`, `TG_BOT_TOKEN`, `TG_ALLOWED_USER_IDS`,
+  `TG_AUTH_COOKIE_SECRET`; `init-env.sh` takes the bot token from
+  `$TG_BOT_TOKEN` or `gateways.telegram.token` of the local Coddy config.
+- `init-env.sh` upgrades an existing `.env`: keys the env contract gained
+  since are appended (secrets generated), existing keys are never touched.
+- Smoke test: 13 Telegram checks (signed `initData` of an allowed user, the
+  cookie through to Coddy, a user not on the list, tampered and stale
+  `initData`, stale cookie on page loads and XHR, logout, verify not public);
+  skipped when the feature is off. Regression tests for the Telegram routes.
+- Plan question 7 and documentation for the feature.
+
+### Changed
+
+- `deploy.sh` restarts `tg-auth` when its code changed.
+
 ## [1.0.4] - 2026-09-18
 
 Six review findings on first installs, redeploys and verification, from the

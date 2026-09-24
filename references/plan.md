@@ -24,6 +24,11 @@ One message with every open question; skip what the user already said.
 6. **Where the tools run.** Is this machine the Coddy host? `init-env.sh` and
    `sync-coddy-token.sh` read Coddy's token from the local `~/.coddy/config.yaml`; anywhere else
    the user exports `CODDY_API_TOKEN` instead.
+7. **Telegram Mini App** (optional). Should Coddy also open as a Telegram Mini App? Then: the
+   numeric Telegram user ids allowed in (`@userinfobot` shows one's own), and the bot the Mini App
+   belongs to. The bot token is read from `gateways.telegram.token` of the local Coddy config when
+   this machine is the Coddy host, otherwise the user exports `TG_BOT_TOKEN`; the Mini App URL to
+   set in BotFather is `<public_url>/tg/`.
 
 ## 2. Decide and explain
 
@@ -52,7 +57,8 @@ Wait for agreement or corrections before step 3.
 CC=<skill dir>
 python3 "$CC/scripts/manifest.py" -f <project>/caddy-coddy.yml init \
   --public-host meet.example.com --edge-ssh ops@edge.example.com --coddy-backend 10.0.0.5:12345 \
-  --edge-name edge --coddy-host-name workstation --initial-user alice     # the rest has defaults
+  --edge-name edge --coddy-host-name workstation --initial-user alice \
+  --telegram-user-ids 123456789                                            # optional; the rest has defaults
 bash "$CC/scripts/preflight.sh" <project>
 ```
 
@@ -77,6 +83,7 @@ Flat `key: value` lines; `examples/caddy-coddy.yml` shows a complete file.
 | `coddy_host_name` | default: host part of `coddy_backend` | Short name used in comments and documentation |
 | `coddy_local_url` | default `http://127.0.0.1:<port>` | `coddy serve` as seen from the machine running the tools |
 | `initial_user` | default empty | First user of realm `coddy` (temporary password, change forced) |
+| `telegram_user_ids` | default empty | Telegram user ids allowed to open Coddy as a Mini App (comma-separated); empty keeps Telegram sign-in off |
 | `keep` | default empty | Comma-separated rendered paths that `build` never overwrites once present |
 | `agent_version` | written by `init` | Version of this skill that wrote the file |
 | `coddy_version`, `verified_at` | written by `verify --record` | Last successful smoke test |

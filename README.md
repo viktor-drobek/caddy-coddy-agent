@@ -4,12 +4,14 @@ A [Coddy](https://coddy.dev) skill, `/caddy-coddy`, that puts a Coddy server beh
 address with real logins: **Caddy** (TLS, routing) + **Keycloak** (users, realm `coddy`, login
 page) + **oauth2-proxy** (OIDC client, session cookie, bearer-token check), deployed with Docker
 Compose to a host you choose, over ssh. Browsers log in at Keycloak; scripts and services use
-Keycloak tokens; Coddy's own API token never leaves the proxy.
+Keycloak tokens; allow-listed Telegram users can open Coddy as a Telegram Mini App; Coddy's own
+API token never leaves the proxy.
 
 ```
 internet ── https://<public_host> ──► Caddy :443 (edge host)
                                          ├── /auth/*    → Keycloak
                                          ├── /oauth2/*  → oauth2-proxy
+                                         ├── /tg/*      → tg-auth (Telegram Mini App sign-in)
                                          └── /*  forward_auth → oauth2-proxy → reverse_proxy → coddy serve
                                                 Authorization := "Bearer <CODDY_API_TOKEN>"
 ```

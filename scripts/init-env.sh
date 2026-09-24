@@ -15,9 +15,59 @@ cc_project "${1:-.}"
 cd "$PROJECT"
 [ -f .env.example ] || die "no .env.example in $PROJECT; run the build phase first"
 
+INIT_PW=
+[ -n "$CC_INITIAL_USER" ] && INIT_PW=$(openssl rand -base64 15 | tr -d '/+=')
+
+# Value for a key of .env.example, or failure to keep the example's own value.
+value_for() {
+  case $1 in
+    CODDY_API_TOKEN) printf '%s' "${TOKEN:-}" ;;
+    KC_DB_PASSWORD|KC_ADMIN_PASSWORD|CODDY_WEB_CLIENT_SECRET|CODDY_SERVICE_CLIENT_SECRET) openssl rand -hex 32 ;;
+    OAUTH2_PROXY_COOKIE_SECRET) openssl rand -base64 32 | tr -- '+/' '-_' ;;
+    KC_INITIAL_USER) printf '%s' "$CC_INITIAL_USER" ;;
+    KC_INITIAL_USER_PASSWORD) printf '%s' "$INIT_PW" ;;
+    TG_AUTH_COOKIE_SECRET) openssl rand -hex 32 ;;
+    TG_ALLOWED_USER_IDS) printf '%s' "$CC_TELEGRAM_USER_IDS" ;;
+    TG_BOT_TOKEN) printf '%s' "$TG_TOKEN" ;;
+    *) return 1 ;;
+  esac
+}
+
+# Telegram Mini App sign-in (optional): the bot token comes from $TG_BOT_TOKEN,
+# else from gateways.telegram.token in the local Coddy config; empty keeps it off.
+tg_token_from_config() {
+  local cfg=${CODDY_CONFIG:-${CODDY_HOME:-$HOME/.coddy}/config.yaml} t var
+  [ -f "$cfg" ] || return 0
+  t=$(awk '/^gateways:/{g=1} g && /^  telegram:/{t=1} g && t && /^    token:/{print $2; exit}' "$cfg" | tr -d '"'"'"'"')
+  case "$t" in '${'*'}') var=${t#'${'}; var=${var%'}'}; t=${!var:-} ;; esac
+  printf '%s' "$t"
+}
+TG_TOKEN=${TG_BOT_TOKEN:-$(tg_token_from_config)}
+if [ -n "$CC_TELEGRAM_USER_IDS" ] && [ -z "$TG_TOKEN" ]; then
+  log "manifest lists telegram_user_ids but no bot token was found: export TG_BOT_TOKEN to enable Telegram sign-in (it stays off otherwise)"
+fi
+
 ensure_edge_dir
 if edge "test -f '$CC_EDGE_DIR/.env'"; then
-  log ".env already exists on $CC_EDGE_SSH:$CC_EDGE_DIR; nothing to do (edit it there to rotate secrets)"
+  # Existing site: append keys the env contract gained since (new features);
+  # keys already present are never touched. Secrets are generated here.
+  have=$(edge "sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' '$CC_EDGE_DIR/.env'")
+  added=
+  while IFS= read -r line || [ -n "$line" ]; do
+    case $line in
+      [A-Z]*=*)
+        key=${line%%=*}
+        grep -qx "$key" <<<"$have" && continue
+        if new=$(value_for "$key"); then value=$new; else value=${line#*=}; fi
+        added+="$key=$value"$'\n' ;;
+    esac
+  done < .env.example
+  if [ -n "$added" ]; then
+    printf '%s' "$added" | edge "cat >> '$CC_EDGE_DIR/.env'"
+    log "added to $CC_EDGE_SSH:$CC_EDGE_DIR/.env: $(printf '%s' "$added" | sed 's/=.*//' | tr '\n' ' ')"
+  else
+    log ".env already exists on $CC_EDGE_SSH:$CC_EDGE_DIR and has every key; nothing to do (edit it there to rotate secrets)"
+  fi
   exit 0
 fi
 
@@ -41,20 +91,6 @@ case "$code" in
   *) log "coddy not reachable from here at $CC_CODDY_LOCAL_URL (HTTP ${code:-000}); the token is not pre-checked" ;;
 esac
 
-INIT_PW=
-[ -n "$CC_INITIAL_USER" ] && INIT_PW=$(openssl rand -base64 15 | tr -d '/+=')
-
-# Value for a key of .env.example, or failure to keep the example's own value.
-value_for() {
-  case $1 in
-    CODDY_API_TOKEN) printf '%s' "$TOKEN" ;;
-    KC_DB_PASSWORD|KC_ADMIN_PASSWORD|CODDY_WEB_CLIENT_SECRET|CODDY_SERVICE_CLIENT_SECRET) openssl rand -hex 32 ;;
-    OAUTH2_PROXY_COOKIE_SECRET) openssl rand -base64 32 | tr -- '+/' '-_' ;;
-    KC_INITIAL_USER) printf '%s' "$CC_INITIAL_USER" ;;
-    KC_INITIAL_USER_PASSWORD) printf '%s' "$INIT_PW" ;;
-    *) return 1 ;;
-  esac
-}
 
 content=$(while IFS= read -r line || [ -n "$line" ]; do
   case $line in

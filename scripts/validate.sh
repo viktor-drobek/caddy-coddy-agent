@@ -47,6 +47,7 @@ if [ -f docker-compose.yml ] && [ -f Caddyfile ] && [ -f .env.example ]; then
         CODDY_BACKEND) echo "$k=127.0.0.1:18080" ;;
         KEYCLOAK_BACKEND) echo "$k=127.0.0.1:8080" ;;
         OAUTH2_PROXY_BACKEND) echo "$k=127.0.0.1:4180" ;;
+        TG_AUTH_BACKEND) echo "$k=127.0.0.1:4181" ;;
         PUBLIC_URL) echo "$k=$CC_PUBLIC_URL" ;;
         PUBLIC_HOST) echo "$k=$CC_PUBLIC_HOST" ;;
         KC_HOSTNAME) echo "$k=$CC_KC_HOSTNAME" ;;

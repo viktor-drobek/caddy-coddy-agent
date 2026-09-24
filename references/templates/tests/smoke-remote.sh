@@ -100,6 +100,42 @@ if [ "$WITH_CLI" = 1 ]; then
   contains "coddy cli --remote with a wrong token is refused" "unauthorized" "$OUT"
 fi
 
+echo "== telegram mini app (tg-auth)"
+expect "/tg/auth/verify is not public -> 404" 404 "$(code $URL/tg/auth/verify)"
+if [ -z "${TG_BOT_TOKEN:-}" ] || [ -z "${TG_ALLOWED_USER_IDS:-}" ]; then
+  echo "SKIP telegram sign-in: TG_BOT_TOKEN or TG_ALLOWED_USER_IDS not set in .env"
+else
+  contains "landing page /tg/ served" "Telegram" "$(curl -s $R $URL/tg/)"
+  # initData signed like Telegram does: HMAC-SHA256 over the sorted fields with a key derived from the bot token.
+  sign() { # sign <telegram user id> <seconds in the past> [break]
+    python3 - "$TG_BOT_TOKEN" "$1" "$2" "${3:-}" <<'PYSIGN'
+import hashlib, hmac, json, sys, time, urllib.parse
+token, uid, skew, brk = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), sys.argv[4]
+d = {"user": json.dumps({"id": uid, "first_name": "Smoke", "username": "smoketest"}, separators=(",", ":")),
+     "auth_date": str(int(time.time()) - skew), "query_id": "smoke"}
+check = "\n".join(f"{k}={v}" for k, v in sorted(d.items()))
+secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+d["hash"] = "0" * 64 if brk else hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+print(urllib.parse.urlencode(d))
+PYSIGN
+  }
+  ALLOWED=${TG_ALLOWED_USER_IDS%%,*}
+  OTHER=1; case ",$TG_ALLOWED_USER_IDS," in *,1,*) OTHER=2 ;; esac
+  TJ=$(mktemp)
+  expect "signed initData of an allowed user -> 200 + cookie" 200 "$(curl -s $R -o /dev/null -w '%{http_code}' -c $TJ -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 0)" $URL/tg/auth/login)"
+  contains "telegram cookie -> /coddy/auth/me authenticated" '"authenticated":true' "$(curl -s $R -b $TJ -H 'Accept: application/json' $URL/coddy/auth/me)"
+  expect "telegram cookie -> /coddy/sessions 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/coddy/sessions)"
+  expect "telegram cookie -> page load 200" 200 "$(code -b $TJ -H 'Accept: text/html' $URL/)"
+  expect "signed initData of a user not on the list -> 403" 403 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $OTHER 0)" $URL/tg/auth/login)"
+  expect "tampered initData -> 401" 401 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 0 break)" $URL/tg/auth/login)"
+  expect "stale initData (1 day old) -> 401" 401 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 86400)" $URL/tg/auth/login)"
+  expect "bogus telegram cookie on a page load -> 302" 302 "$(code -H 'Cookie: _coddy_tg=bogus' -H 'Accept: text/html' $URL/)"
+  contains "bogus telegram cookie redirects to /tg/" "/tg/?rd=" "$(redirect -H 'Cookie: _coddy_tg=bogus' -H 'Accept: text/html' $URL/)"
+  expect "bogus telegram cookie on XHR -> 401" 401 "$(code -H 'Cookie: _coddy_tg=bogus' -H 'Accept: application/json' $URL/coddy/sessions)"
+  expect "/tg/logout clears the cookie -> 302" 302 "$(code -b $TJ $URL/tg/logout)"
+  rm -f $TJ
+fi
+
 # The wrapper records a version only after a successful exit and this marker.
 [ "$failures" -eq 0 ] || exit 1
 echo "SMOKE_COMPLETE"

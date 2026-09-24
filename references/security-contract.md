@@ -30,6 +30,11 @@ under `keycloak/`.
 7. **Keycloak health gating.** `deploy.sh` waits for the management-port readiness probe before
    bootstrap, then retries bootstrap while Keycloak still imports the realm; oauth2-proxy has
    `depends_on: condition: service_healthy`. Keep the health checks and the wait loop.
+8. **Telegram sign-in fails closed.** `tg-auth` accepts an `initData` only with a valid HMAC
+   made from `TG_BOT_TOKEN`, an `auth_date` at most an hour old and a user id listed in
+   `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody. Its cookie is signed with
+   `TG_AUTH_COOKIE_SECRET`, `/tg/auth/verify` answers 404 to the internet, identity headers come
+   only from the verify response, and the Coddy token swap applies as for every other caller.
 
 Also load-bearing:
 

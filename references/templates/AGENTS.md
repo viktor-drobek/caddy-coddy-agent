@@ -24,6 +24,7 @@ project's tests and run them after every change (`/caddy-coddy validate`, `deplo
 | `keycloak/bootstrap.sh` | Idempotent post-start configuration: client secrets from `.env`, `coddy-cli` if missing, `VERIFY_PROFILE` off, theme, first user |
 | `keycloak/themes/coddy/` | Login theme |
 | `oauth2-proxy/oauth2-proxy.toml` | OIDC client `coddy-web`, cookie, bearer-token acceptance |
+| `tg-auth/server.py` | Telegram Mini App sign-in: verifies Telegram's signed `initData` with `TG_BOT_TOKEN`, admits `TG_ALLOWED_USER_IDS`, issues the `_coddy_tg` cookie, answers Caddy's `/tg/auth/verify` |
 | `deploy.sh` | rsync to `@@EDGE_SSH@@:@@EDGE_DIR@@`, `docker compose up -d`, wait for health, bootstrap |
 | `add-user.sh`, `remove-user.sh`, `list-users.sh` | Users of realm `coddy` (temporary passwords, forced change) |
 | `add-service.sh` | Machine clients with the `coddy-web` audience mapper |
@@ -49,6 +50,9 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
    `/auth/realms/coddy/*` is public.
 7. `deploy.sh` waits for Keycloak's readiness probe before bootstrap and retries while the realm
    imports.
+8. Telegram sign-in admits only verified `initData` (HMAC with the bot token, at most an hour
+   old) of a user in `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody, and the
+   `/tg/auth/verify` endpoint is never public.
 
 ## Working on the stack
 

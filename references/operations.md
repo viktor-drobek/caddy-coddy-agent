@@ -47,6 +47,21 @@ secret is `CODDY_SERVICE_CLIENT_SECRET` in `.env`. To rotate this managed client
 on the edge and redeploy. `add-service.sh` rejects `coddy-service` because bootstrap would
 otherwise overwrite the new secret on the next deploy.
 
+## Telegram Mini App
+
+| Task | How |
+|---|---|
+| Enable | `.env` on the edge: `TG_BOT_TOKEN` (the bot the Mini App belongs to), `TG_ALLOWED_USER_IDS`, `TG_AUTH_COOKIE_SECRET`; `deploy.sh`; then in BotFather set the bot's menu button (or `/newapp`) to `<public_url>/tg/` |
+| Allow or remove a person | Edit `TG_ALLOWED_USER_IDS` in the edge's `.env` (and `telegram_user_ids` in the manifest so a re-render agrees), then `deploy.sh`; removal takes effect at the next request |
+| Find a Telegram user id | The person asks `@userinfobot`; Coddy's own gateway config lists admins by id |
+| End every Telegram session | Rotate `TG_AUTH_COOKIE_SECRET` and redeploy |
+| End one session | The person opens `<public_url>/tg/logout` |
+| Turn it off | Empty `TG_BOT_TOKEN`, redeploy: `/tg/` answers 404 and existing cookies stop working |
+
+Telegram sessions are separate from Keycloak: no Keycloak user is created, Coddy sees
+`X-Forwarded-User: <telegram username>`. The `_coddy_tg` cookie takes precedence over a Keycloak
+session in the same browser.
+
 ## Coddy's own token
 
 `httpserver.auth_token` is the one secret shared between Coddy and Caddy. When it changes (a

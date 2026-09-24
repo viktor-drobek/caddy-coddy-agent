@@ -16,7 +16,11 @@ bash "$CC/scripts/deploy.sh" --skip-validate <project>
    `.env.example` with generated secrets (`openssl rand`). Coddy's token comes from
    `$CODDY_API_TOKEN`, `$CODDY_HTTP_TOKEN` or the local `~/.coddy/config.yaml`
    (`httpserver.auth_token`). When none is available the script stops and says so: ask the user
-   to export the token as an environment variable; never paste it into the conversation.
+   to export the token as an environment variable; never paste it into the conversation. The
+   Telegram bot token (when `telegram_user_ids` is set) comes from `$TG_BOT_TOKEN` or from
+   `gateways.telegram.token` of the local Coddy config the same way. On an existing site
+   `init-env.sh` appends keys the env contract gained since (new features) and leaves the rest
+   untouched.
 3. The project's `deploy.sh` rsyncs the checkout (without `.env`, `.git` and agent folders), runs
    `docker compose pull` and `up -d`, waits for the Keycloak health check (up to five minutes on
    a slow machine), then runs `keycloak/bootstrap.sh` inside the container, retrying while

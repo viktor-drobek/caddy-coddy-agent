@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.0.4
+version: 1.1.0
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -23,7 +23,9 @@ internet ── https://<public_host> ──► Caddy :443 (edge host, host netw
 ```
 
 Browsers log in at Keycloak and get a session cookie; scripts and services present a Keycloak
-token (password grant on the public client `coddy-cli`, client_credentials on a machine client).
+token (password grant on the public client `coddy-cli`, client_credentials on a machine client);
+allow-listed Telegram users open Coddy as a Telegram Mini App (`/tg/`, `tg-auth` verifies
+Telegram's signed `initData`).
 Caddy verifies every request through oauth2-proxy and forwards it to `coddy serve` with Coddy's
 own `httpserver.auth_token`. Nobody but the proxy ever holds Coddy's token, and Coddy's own
 sign-in screen is never shown behind the proxy.
@@ -67,6 +69,8 @@ a dry run, denied permissions), ask them from here and stop after the architectu
 5. The project directory here (default: current directory) and on the edge (default
    `/opt/caddy-coddy`).
 6. Is this machine the Coddy host? Otherwise the user exports `CODDY_API_TOKEN` for the tools.
+7. Telegram Mini App wanted? Then the numeric Telegram user ids allowed in, and the bot it belongs
+   to (its token is read from the local Coddy config on the Coddy host, else `TG_BOT_TOKEN`).
 
 Then summarise the architecture with their names in it and wait for agreement before writing
 `caddy-coddy.yml` (`scripts/manifest.py init ...`) and running `scripts/preflight.sh`.

@@ -8,6 +8,8 @@
 #                                  and master realm only behind a Coddy login)
 #   /oauth2/*  -> oauth2-proxy    (OIDC client: /oauth2/start, /oauth2/callback,
 #                                  /oauth2/sign_out, /oauth2/auth)
+#   /tg/*      -> tg-auth         (Telegram Mini App: landing page, initData login;
+#                                  /tg/auth/verify checks the _coddy_tg cookie)
 #   /*         -> forward_auth oauth2-proxy, then reverse_proxy Coddy with the
 #                 Authorization header replaced by Coddy's own API token.
 #
@@ -22,6 +24,10 @@
 #      JWT (issuer, signature, audience "coddy-web"); Caddy then swaps the
 #      header for CODDY_API_TOKEN. Clients never learn Coddy's token and Coddy
 #      never sees Keycloak tokens.
+#   3. Telegram Mini App: the app opens /tg/, tg-auth verifies Telegram's signed
+#      initData with the bot token, admits only TG_ALLOWED_USER_IDS and sets the
+#      _coddy_tg cookie; from then on requests are checked at tg-auth instead of
+#      oauth2-proxy and reach Coddy with the same CODDY_API_TOKEN swap.
 #
 # All addresses and secrets come from .env (see .env.example).
 
@@ -48,6 +54,25 @@
 			copy_response_headers {
 				include Set-Cookie
 			}
+		}
+	}
+}
+
+# Telegram Mini App sessions: tg-auth verified the Telegram initData once and
+# issued the _coddy_tg cookie; every request carrying it is checked here the way
+# Keycloak sessions are checked at oauth2-proxy. Identity headers come only from
+# the verify response, never from the caller.
+(tg_auth) {
+	method GET
+	rewrite /tg/auth/verify
+	header_up X-Forwarded-Method {method}
+	header_up X-Forwarded-Uri {uri}
+	@tg_ok status 2xx
+	handle_response @tg_ok {
+		route {
+			request_header -X-Auth-Request-*
+			request_header X-Auth-Request-User {rp.header.X-Auth-Request-User}
+			request_header X-Auth-Request-Preferred-Username {rp.header.X-Auth-Request-Preferred-Username}
 		}
 	}
 }
@@ -103,6 +128,46 @@
 	# --- oauth2-proxy's own endpoints ---
 	handle /oauth2/* {
 		reverse_proxy {env.OAUTH2_PROXY_BACKEND}
+	}
+
+	# --- Telegram Mini App: the landing page (reads initData inside Telegram and
+	# posts it to /tg/auth/login) and the login endpoint are public; the verify
+	# endpoint is for this Caddyfile only. Empty TG_BOT_TOKEN turns all of it off
+	# inside tg-auth (404 / 503). ---
+	handle /tg/auth/verify {
+		respond 404
+	}
+	handle /tg/* {
+		reverse_proxy {env.TG_AUTH_BACKEND}
+	}
+
+	# --- Telegram sessions (_coddy_tg cookie) replace the Keycloak session and take
+	# precedence over it. A stale cookie sends a page load back to /tg/, where the
+	# Mini App signs in again; XHR/SSE get 401. ---
+	@tg_page {
+		header Cookie *_coddy_tg=*
+		header Accept *text/html*
+	}
+	handle @tg_page {
+		route {
+			reverse_proxy {env.TG_AUTH_BACKEND} {
+				import tg_auth
+				@tg_unauthenticated status 401
+				handle_response @tg_unauthenticated {
+					redir * /tg/?rd={uri} 302
+				}
+			}
+			import coddy_upstream
+		}
+	}
+	@tg header Cookie *_coddy_tg=*
+	handle @tg {
+		route {
+			reverse_proxy {env.TG_AUTH_BACKEND} {
+				import tg_auth
+			}
+			import coddy_upstream
+		}
 	}
 
 	# --- Services: Keycloak bearer token. Invalid/expired -> 401 from oauth2-proxy. ---
