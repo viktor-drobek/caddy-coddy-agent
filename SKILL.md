@@ -6,9 +6,10 @@ description: >
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
   architecture with the user, renders a Caddy + Keycloak + oauth2-proxy stack from templates into a
   project directory, validates it, deploys it with docker compose to the edge host of the user's choice
-  over ssh, optionally exposes its Swarm Relay to authenticated browsers, tests every access path end
-  to end, records the Coddy version, and then provides the tools for users, tokens and service clients.
-  Needs the user's answers about hosts and the public name.
+  over ssh, optionally enables allow-listed Telegram Mini App sign-in and exposes its Swarm Relay to
+  authenticated browsers, tests every access path end to end, records the Coddy version, and then
+  provides the tools for users, tokens and service clients. Needs the user's answers about hosts and
+  the public name.
 ---
 
 # caddy-coddy: a public, authenticated edge for a Coddy server
@@ -19,8 +20,10 @@ You build and operate this, on hosts the user names:
 internet ── https://<public_host> ──► Caddy :443 (edge host, host network)
                                          ├── /auth/*    → Keycloak (realm "coddy": users, login page)
                                          ├── /oauth2/*  → oauth2-proxy (OIDC client, session cookie)
-                                         ├── /swarm/*   → Swarm Relay, Authorization := CODDY_SWARM_TOKEN
-                                         └── /*  forward_auth → oauth2-proxy, then reverse_proxy → coddy serve
+                                         ├── /tg/*      → tg-auth (Telegram Mini App sign-in)
+                                         ├── /swarm/*   → session auth, then Swarm Relay
+                                         │                 Authorization := CODDY_SWARM_TOKEN
+                                         └── /*  session auth, then reverse_proxy → coddy serve
                                                 Authorization := "Bearer <CODDY_API_TOKEN>"
 ```
 
@@ -31,6 +34,25 @@ Telegram's signed `initData`).
 Caddy verifies every request through oauth2-proxy or, for a Telegram cookie, tg-auth, and forwards
 it to `coddy serve` with Coddy's own `httpserver.auth_token`. Nobody but the proxy ever holds
 Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
+
+## Telegram Mini App routing and diagnosis
+
+- A Mini App loaded from `https://<public_host>/tg/` runs with the public site's origin, not with
+  `t.me`, `web.telegram.org` or a Telegram-specific origin. Do not add Telegram domains to
+  `httpserver.cors` merely because the UI reports a generic relay/CORS/token error. First inspect
+  the request's `Origin`, origin-only `Referer`, Caddy status and preflight traffic without printing
+  cookies or tokens. A same-origin request with no `OPTIONS` failure is not a CORS failure.
+- Never detect a Mini App by User-Agent. Telegram Desktop may expose an ordinary WebKit UA and a
+  mobile Telegram client may expose the system browser UA. Select authentication by the
+  `_coddy_tg` cookie, verify it at tg-auth and fail closed when it is stale or invalid.
+- The Telegram cookie must authorize every protected browser route, including `/swarm/*` and all
+  `/swarm-relay/*` branches. A route declared before the general Telegram handler must explicitly
+  select tg-auth for `_coddy_tg` and oauth2-proxy otherwise. Preserve the separate Coddy and Swarm
+  upstream token substitutions after either browser-session check succeeds.
+- Treat “local relay is unreachable or unauthorized” as a symptom, not a diagnosis. Correlate the
+  failing path and status across Caddy, tg-auth and oauth2-proxy. A successful `/tg/auth/login` plus
+  `200` on `/coddy/*` but `401` on `/swarm/*` means route-specific authentication is missing, not
+  that Telegram must be added to CORS.
 
 ## Phases
 
