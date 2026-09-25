@@ -335,6 +335,25 @@ class ProxyTest(SiteFixture):
                 auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
                 self.assertNotIn("Authorization", auth[2])
 
+    def test_telegram_cookie_reaches_swarm_remote(self):
+        for path, backend, upstream_path, token in (
+                ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
+                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token")):
+            with self.subTest(path=path):
+                status, _, body = self.request(path, {
+                    "Cookie": "_coddy_tg=valid", "Authorization": "Bearer caller-token"})
+                self.assertEqual(status, 200)
+                upstream = json.loads(body)
+                self.assertEqual(upstream["backend"], backend)
+                self.assertEqual(upstream["headers"]["Authorization"], f"Bearer {token}")
+                self.assertEqual(upstream["headers"]["X-Forwarded-User"], "tguser")
+                requests = self.swarm_requests if backend == "swarm" else self.requests
+                self.assertEqual(requests[-1][0], upstream_path)
+                auth = [request for request in self.requests if request[0] == "/tg/auth/verify"][-1]
+                self.assertNotIn("Authorization", auth[2])
+
     def test_missing_identity_claim_cannot_be_spoofed(self):
         status, _, body = self.request("/coddy/sessions", {
             "Authorization": "Bearer valid", "X-Auth-Request-User": "mallory",

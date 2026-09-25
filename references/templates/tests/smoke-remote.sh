@@ -143,6 +143,11 @@ PYSIGN
   contains "telegram cookie -> /coddy/auth/me authenticated" '"authenticated":true' "$(curl -s $R -b $TJ -H 'Accept: application/json' $URL/coddy/auth/me)"
   expect "telegram cookie -> /coddy/sessions 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/coddy/sessions)"
   expect "telegram cookie -> page load 200" 200 "$(code -b $TJ -H 'Accept: text/html' $URL/)"
+  if [ -n "${CODDY_SWARM_TOKEN:-}" ]; then
+    expect "telegram cookie -> swarm absolute path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm/info)"
+    expect "telegram cookie -> swarm prefixed path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
+    expect "telegram cookie -> swarm remote root 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
+  fi
   expect "signed initData of a user not on the list -> 403" 403 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $OTHER 0)" $URL/tg/auth/login)"
   expect "tampered initData -> 401" 401 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 0 break)" $URL/tg/auth/login)"
   expect "stale initData (1 day old) -> 401" 401 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 86400)" $URL/tg/auth/login)"

@@ -57,7 +57,8 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
    `SWARM_RELAY_BACKEND` for `/swarm/*`, while `/swarm-relay/coddy/*` and
    `/swarm-relay/v1/*` use `CODDY_API_TOKEN` and the ordinary Coddy backend. Every node's
    `swarm.join[].token` must equal its own `httpserver.auth_token`; otherwise the node remains
-   visible but fan-out responses contain `<node>: 401 Unauthorized` warnings.
+   visible but fan-out responses contain `<node>: 401 Unauthorized` warnings. Every browser
+   route under these prefixes accepts a verified Telegram cookie or a valid Keycloak session.
 
 ## Working on the stack
 

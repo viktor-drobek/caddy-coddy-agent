@@ -77,6 +77,20 @@
 	}
 }
 
+# Swarm URLs are handled before the general Telegram and Keycloak routes below,
+# so select the matching browser-session verifier here. A Telegram cookie takes
+# precedence and fails closed when it is stale; all other callers use Keycloak.
+(swarm_browser_auth) {
+	reverse_proxy @tg_session {env.TG_AUTH_BACKEND} {
+		import tg_auth
+		header_up -Authorization
+	}
+	reverse_proxy @non_tg_session {env.OAUTH2_PROXY_BACKEND} {
+		import oauth2_auth
+		header_up -Authorization
+	}
+}
+
 (coddy_upstream) {
 	reverse_proxy {env.CODDY_BACKEND} {
 		# Coddy's static API token (httpserver.auth_token in @@CODDY_HOST_NAME@@:~/.coddy/config.yaml).
@@ -131,37 +145,29 @@
 	}
 
 	# --- Coddy swarm relay: authenticate the browser session through oauth2-proxy,
-	# then replace the caller's Authorization header with the relay client token. ---
+	# or tg-auth, then replace the caller's Authorization header with the relay
+	# client token. ---
 	# The remote environment also requests the relay host's own Coddy API. Keep
 	# those requests on CODDY_BACKEND; only /swarm/* belongs to the relay port.
+	@tg_session header Cookie *_coddy_tg=*
+	@non_tg_session not header Cookie *_coddy_tg=*
 	handle /swarm-relay/coddy/* {
 		route {
-			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
-				import oauth2_auth
-				header_up -Authorization
-			}
+			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
 			import coddy_upstream
 		}
 	}
 	handle /swarm-relay/v1/* {
 		route {
-			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
-				import oauth2_auth
-				header_up -Authorization
-			}
+			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
 			import coddy_upstream
 		}
 	}
 	handle /swarm-relay/* {
 		route {
-			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
-				import oauth2_auth
-				# Check only the Keycloak session cookie. A caller-supplied bearer
-				# must neither be interpreted as a Keycloak JWT nor reach the relay.
-				header_up -Authorization
-			}
+			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
 			reverse_proxy {env.SWARM_RELAY_BACKEND} {
 				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
@@ -179,10 +185,7 @@
 	# navigating node mounts, even when the configured remote has a path prefix.
 	handle /swarm/* {
 		route {
-			reverse_proxy {env.OAUTH2_PROXY_BACKEND} {
-				import oauth2_auth
-				header_up -Authorization
-			}
+			import swarm_browser_auth
 			reverse_proxy {env.SWARM_RELAY_BACKEND} {
 				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
 				header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}

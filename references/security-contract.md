@@ -36,8 +36,9 @@ under `keycloak/`.
    `TG_AUTH_COOKIE_SECRET`, `/tg/auth/verify` answers 404 to the internet, identity headers come
    only from the verify response, and the Coddy token swap applies as for every other caller.
 9. **Swarm credentials stay in their own lanes.** `/swarm-relay/swarm/*` (with the prefix
-   removed) and absolute `/swarm/*` go to `SWARM_RELAY_BACKEND` only after oauth2-proxy accepts
-   the browser session; Caddy removes any caller `Authorization` and sends
+   removed) and absolute `/swarm/*` go to `SWARM_RELAY_BACKEND` only after tg-auth accepts a
+   Telegram cookie or oauth2-proxy accepts the other browser session; Caddy removes any caller
+   `Authorization` and sends
    `Bearer <CODDY_SWARM_TOKEN>`. `/swarm-relay/coddy/*` and `/swarm-relay/v1/*` instead go to
    `CODDY_BACKEND` with `CODDY_API_TOKEN`, because they describe the relay host's own Coddy API.
    The relay client token must never reach Coddy, and Coddy's HTTP token must never be used as the

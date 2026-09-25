@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.2.0
+version: 1.2.1
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -28,9 +28,9 @@ Browsers log in at Keycloak and get a session cookie; scripts and services prese
 token (password grant on the public client `coddy-cli`, client_credentials on a machine client);
 allow-listed Telegram users open Coddy as a Telegram Mini App (`/tg/`, `tg-auth` verifies
 Telegram's signed `initData`).
-Caddy verifies every request through oauth2-proxy and forwards it to `coddy serve` with Coddy's
-own `httpserver.auth_token`. Nobody but the proxy ever holds Coddy's token, and Coddy's own
-sign-in screen is never shown behind the proxy.
+Caddy verifies every request through oauth2-proxy or, for a Telegram cookie, tg-auth, and forwards
+it to `coddy serve` with Coddy's own `httpserver.auth_token`. Nobody but the proxy ever holds
+Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
 
 ## Phases
 

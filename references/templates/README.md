@@ -178,9 +178,9 @@ Telegram session at once, rotate `TG_AUTH_COOKIE_SECRET`.
 
 Set `CODDY_SWARM_TOKEN` in the edge `.env` to the relay's `swarm.auth_token`, then run
 `./deploy.sh`. Configure the Coddy UI remote as `@@PUBLIC_URL@@/swarm-relay`. Caddy accepts the
-browser's Keycloak session, strips the caller's `Authorization`, and sends the relay token only to
-the Swarm backend. After the UI recognises the relay it may use absolute `/swarm/*` paths; those
-are routed to the same backend. Requests under `/swarm-relay/coddy/*` and
+browser's Keycloak or Telegram session, strips the caller's `Authorization`, and sends the relay
+token only to the Swarm backend. After the UI recognises the relay it may use absolute
+`/swarm/*` paths; those are routed to the same backend. Requests under `/swarm-relay/coddy/*` and
 `/swarm-relay/v1/*` describe the relay host's own Coddy API and therefore use
 `CODDY_API_TOKEN` instead.
 

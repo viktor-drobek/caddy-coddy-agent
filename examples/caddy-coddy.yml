@@ -2,7 +2,7 @@
 # Written by `/caddy-coddy plan` (manifest.py init); read by build, deploy and verify.
 # Flat `key: value` lines only, so shell and Python read it without a YAML library.
 # Version of the caddy-coddy agent that wrote this file.
-agent_version: 1.2.0
+agent_version: 1.2.1
 # Public DNS name of the site; its A/AAAA record points at the edge, or at a NAT that forwards 80/443 to it.
 public_host: meet.example.com
 # Public origin without a path; the OIDC issuer is <public_url>/auth/realms/coddy.

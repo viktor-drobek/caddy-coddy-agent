@@ -8,6 +8,18 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.2.1] - 2026-09-25
+
+### Fixed
+
+- Telegram Mini App sessions can now use `/swarm/*` and every `/swarm-relay/*` route. These
+  routes previously checked only oauth2-proxy, so a valid `_coddy_tg` session reached ordinary
+  Coddy endpoints but received `401` from the local relay. Caddy now selects tg-auth for a
+  Telegram cookie and oauth2-proxy for other browser sessions before applying the existing,
+  isolated Coddy or Swarm upstream token.
+- Regression and deployed smoke coverage now exercise Telegram access to the absolute relay
+  path, the prefixed relay path and the relay host's Coddy API root.
+
 ## [1.2.0] - 2026-09-24
 
 Proven on the reference deployment against Coddy 1.2.16: deploy succeeded with every service
