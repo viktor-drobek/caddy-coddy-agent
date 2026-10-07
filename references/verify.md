@@ -15,6 +15,10 @@ or `FAIL` lines:
 - **anonymous**: page load → 302 to `/oauth2/start`; XHR and EventSource → 401 (never a
   redirect); a junk bearer token → 401; the Keycloak admin console, admin API and master realm →
   302; realm `coddy` discovery → 200 with the right issuer;
+- **local UI CORS**: credential-free OPTIONS from `http://localhost:18080` receives
+  `204`, that exact origin, and allowed Authorization/GET headers on root Coddy API
+  and both Relay URL forms; other origins, non-API paths, anonymous real requests
+  and invalid Bearer tokens remain protected;
 - **browser login**: the themed login page, temporary password → forced change, callback lands on
   `/` with 200 and the Coddy UI, `/coddy/auth/me` authenticated through the cookie,
   `/coddy/sessions` 200, SSE `/coddy/events` streams, the admin console opens with the Coddy

@@ -8,6 +8,27 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.2.4] - 2026-10-07
+
+Proven on the reference deployment against Coddy 1.2.81: all 90 end-to-end
+smoke checks passed, along with 34 regression tests using Caddy 2.11.7.
+
+### Fixed
+
+- Local Coddy UI preflight on `/v1/*` and `/coddy/*` now receives the same
+  narrowly allowed response as `/swarm/*` and `/swarm-relay/*`. The edge previously
+  rejected root `/v1/models` and `/coddy/auth/me` OPTIONS with `401`, blocking
+  browser requests even when their Keycloak Bearer token was valid.
+- Real requests, other origins and non-API paths still require authentication;
+  no caller token or internal Coddy/Relay token is exposed by the preflight.
+
+### Added
+
+- Regression and deployed smoke coverage for API/Relay preflight headers,
+  origin restrictions and protected real requests.
+- Agent guidance distinguishing remote CORS configuration, edge preflight
+  handling and local CLI credentials from browser credentials.
+
 ## [1.2.3] - 2026-10-07
 
 Proven on the reference deployment against Coddy 1.2.81: Caddy was recreated and

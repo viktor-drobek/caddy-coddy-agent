@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.2.3
+version: 1.2.4
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -53,6 +53,23 @@ Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
   failing path and status across Caddy, tg-auth and oauth2-proxy. A successful `/tg/auth/login` plus
   `200` on `/coddy/*` but `401` on `/swarm/*` means route-specific authentication is missing, not
   that Telegram must be added to CORS.
+
+## Local UI CORS diagnosis
+
+- CORS belongs to the receiving server: `httpserver.cors` for Coddy API calls and
+  `swarm.cors` for Relay calls. `allow_loopback: true` there admits a UI served from
+  the user's own machine; setting it on the local client does not change remote responses.
+- The Caddy template answers unauthenticated `OPTIONS` from exactly
+  `http://localhost:18080` on `/v1/*`, `/coddy/*`, `/swarm/*` and `/swarm-relay/*`.
+  Real requests still require the existing Keycloak or Telegram authentication.
+  Never bypass authentication for a real request to make a CORS alert disappear.
+- Check the failing path and both preflight and real response. A valid Bearer GET
+  returning `200` does not prove browser access works: preflight carries no Bearer
+  token and must not be rejected by edge authentication. A root remote probes
+  `/v1/models` before Relay discovery, so checking only `/swarm/*` is insufficient.
+- A `CODDY_REMOTE_TOKEN` in the local environment is a CLI credential, not proof
+  the browser sends it. Check the remote entry or browser credential without
+  printing secrets, and inspect the edge log's Origin, method and status.
 
 ## Phases
 

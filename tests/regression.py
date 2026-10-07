@@ -131,6 +131,27 @@ esac''')
                     self.assertFalse(client["enabled"])
                     self.assertNotIn("secret", client)
 
+    def test_loopback_preflight_rendered_contract(self):
+        config = (self.site / "Caddyfile").read_text()
+        matcher = config.split("\t@swarm_loopback_preflight {\n", 1)[1].split("\n\t}", 1)[0]
+        lines = [line.strip() for line in matcher.splitlines()]
+        self.assertEqual(len(lines), 3)
+        self.assertIn("method OPTIONS", lines)
+        self.assertIn("header Origin http://localhost:18080", lines)
+        paths = next(line.split()[1:] for line in lines if line.startswith("path "))
+        self.assertCountEqual(paths, ("/swarm/*", "/swarm-relay/*", "/v1/*", "/coddy/*"))
+        handler = config.split("\thandle @swarm_loopback_preflight {\n", 1)[1].split("\n\t}", 1)[0]
+        self.assertIn("respond 204", handler)
+        self.assertIn("Access-Control-Allow-Origin http://localhost:18080", handler)
+        self.assertIn("Access-Control-Allow-Credentials true", handler)
+        self.assertRegex(handler, r'Access-Control-Allow-Headers "Authorization,')
+        self.assertNotIn("reverse_proxy", handler)
+        self.assertNotIn("import ", handler)
+        for protected in ("handle /swarm-relay/coddy/*", "handle /swarm/*",
+                          "handle @tg", "handle @bearer", "handle @page"):
+            with self.subTest(protected=protected):
+                self.assertLess(config.index("handle @swarm_loopback_preflight"), config.index(protected))
+
     def deploy_trace(self, changes):
         edge = self.base / "edge"
         edge.mkdir()
@@ -216,6 +237,7 @@ class ProxyTest(SiteFixture):
                                                     "body": body, "headers": dict(self.headers)}).encode())
 
                 do_POST = do_GET
+                do_OPTIONS = do_GET
 
             return Stub
 
@@ -270,6 +292,69 @@ class ProxyTest(SiteFixture):
         finally:
             connection.close()
 
+    PREFLIGHT_PATHS = ("/v1/models", "/coddy/auth/me", "/swarm/topology",
+                       "/swarm-relay/swarm/topology", "/swarm-relay/v1/models",
+                       "/swarm-relay/coddy/auth/me")
+
+    def test_loopback_api_preflight_bypasses_auth_and_backends(self):
+        for path in self.PREFLIGHT_PATHS:
+            with self.subTest(path=path):
+                before = (list(self.requests), list(self.swarm_requests))
+                status, headers, body = self.request(path, {
+                    "Origin": "http://localhost:18080",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization, content-type",
+                }, "OPTIONS")
+                self.assertEqual(status, 204)
+                headers = {key.lower(): value for key, value in headers}
+                self.assertEqual(headers.get("access-control-allow-origin"), "http://localhost:18080")
+                self.assertEqual(headers.get("access-control-allow-credentials"), "true")
+                allowed = [value.strip().lower() for value in
+                           headers.get("access-control-allow-headers", "").split(",")]
+                self.assertIn("authorization", allowed)
+                self.assertIn("content-type", allowed)
+                self.assertIn("GET", headers.get("access-control-allow-methods", "").split(", "))
+                self.assertIn("origin", headers.get("vary", "").lower())
+                self.assertEqual(body, b"")
+                self.assertEqual((self.requests, self.swarm_requests), before)
+
+    def assert_protected_request(self, path, origin=None, method="OPTIONS"):
+        before = len(self.requests)
+        swarm_before = list(self.swarm_requests)
+        headers = {"Access-Control-Request-Method": "GET"} if method == "OPTIONS" else {}
+        if origin is not None:
+            headers["Origin"] = origin
+        status, response_headers, _ = self.request(path, headers, method)
+        self.assertEqual(status, 401)
+        self.assertNotIn("access-control-allow-origin", {key.lower() for key, _ in response_headers})
+        self.assertEqual([request[0] for request in self.requests[before:]], ["/oauth2/auth"])
+        self.assertEqual(self.swarm_requests, swarm_before)
+
+    def test_api_preflight_rejects_other_or_missing_origins(self):
+        for path in self.PREFLIGHT_PATHS:
+            for origin in (None, "https://untrusted.example", "http://localhost:18081",
+                           "http://127.0.0.1:18080", "https://localhost:18080", "null"):
+                with self.subTest(path=path, origin=origin):
+                    self.assert_protected_request(path, origin)
+
+    def test_loopback_non_api_options_remains_protected(self):
+        for path in ("/", "/private", "/v1-extra/models", "/coddy-extra/auth/me"):
+            with self.subTest(path=path):
+                self.assert_protected_request(path, "http://localhost:18080")
+
+    def test_loopback_api_get_still_requires_authentication(self):
+        for path in self.PREFLIGHT_PATHS:
+            with self.subTest(path=path):
+                self.assert_protected_request(path, "http://localhost:18080", "GET")
+                status, _, body = self.request(path, {
+                    "Origin": "http://localhost:18080", "Authorization": "Bearer valid"})
+                self.assertEqual(status, 200)
+                upstream = json.loads(body)
+                swarm = path.startswith("/swarm/") or path.startswith("/swarm-relay/swarm/")
+                self.assertEqual(upstream["backend"], "swarm" if swarm else "coddy")
+                token = "test-swarm-token" if swarm else "test-coddy-token"
+                self.assertEqual(upstream["headers"]["Authorization"], f"Bearer {token}")
+
     def test_authentication_and_split_cookie_refresh(self):
         for path in ("/", "/coddy/sessions", "/auth/admin/master/console/"):
             with self.subTest(path=path):
@@ -309,8 +394,7 @@ class ProxyTest(SiteFixture):
                 ("/swarm-relay/swarm/topology", "/swarm/topology"),
                 ("/swarm/topology", "/swarm/topology")):
             with self.subTest(path=path):
-                status, _, body = self.request(path, {
-                    "Cookie": "session=valid", "Authorization": "Bearer caller-token"})
+                status, _, body = self.request(path, {"Cookie": "session=valid"})
                 self.assertEqual(status, 200)
                 upstream = json.loads(body)
                 self.assertEqual(upstream["backend"], "swarm")
@@ -325,8 +409,7 @@ class ProxyTest(SiteFixture):
                 ("/swarm-relay/coddy/auth/me", "/coddy/auth/me"),
                 ("/swarm-relay/v1/models", "/v1/models")):
             with self.subTest(path=path):
-                status, _, body = self.request(path, {
-                    "Cookie": "session=valid", "Authorization": "Bearer caller-token"})
+                status, _, body = self.request(path, {"Cookie": "session=valid"})
                 self.assertEqual(status, 200)
                 upstream = json.loads(body)
                 self.assertEqual(upstream["backend"], "coddy")
@@ -334,6 +417,51 @@ class ProxyTest(SiteFixture):
                 self.assertEqual(self.requests[-1][0], upstream_path)
                 auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
                 self.assertNotIn("Authorization", auth[2])
+
+    def test_api_bearer_reaches_verifier_and_keeps_backend_tokens_isolated(self):
+        for path, backend, upstream_path, token in (
+                ("/v1/models", "coddy", "/v1/models", "test-coddy-token"),
+                ("/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
+                ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
+                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token")):
+            with self.subTest(path=path):
+                before = len(self.requests)
+                swarm_before = len(self.swarm_requests)
+                status, _, body = self.request(path, {"Authorization": "Bearer valid"})
+                self.assertEqual(status, 200)
+                auth = self.requests[before]
+                self.assertEqual(auth[0:2], ("/oauth2/auth", "GET"))
+                self.assertEqual(auth[2]["Authorization"], "Bearer valid")
+                self.assertEqual(auth[2]["X-Forwarded-Uri"], path)
+                self.assertNotIn("Cookie", auth[2])
+                upstream = json.loads(body)
+                self.assertEqual(upstream["backend"], backend)
+                self.assertEqual(upstream["headers"]["Authorization"], f"Bearer {token}")
+                self.assertEqual(upstream["headers"]["X-Forwarded-User"], "alice")
+                if backend == "swarm":
+                    self.assertEqual(len(self.requests), before + 1)
+                    self.assertEqual(len(self.swarm_requests), swarm_before + 1)
+                    self.assertEqual(self.swarm_requests[-1][0], upstream_path)
+                else:
+                    self.assertEqual(len(self.requests), before + 2)
+                    self.assertEqual(self.requests[-1][0], upstream_path)
+                    self.assertEqual(len(self.swarm_requests), swarm_before)
+
+    def test_invalid_api_bearer_without_cookie_fails_closed(self):
+        for path in self.PREFLIGHT_PATHS:
+            with self.subTest(path=path):
+                before = len(self.requests)
+                swarm_before = list(self.swarm_requests)
+                status, _, _ = self.request(path, {"Authorization": "Bearer invalid"})
+                self.assertEqual(status, 401)
+                self.assertEqual(len(self.requests), before + 1)
+                auth = self.requests[before]
+                self.assertEqual(auth[0:2], ("/oauth2/auth", "GET"))
+                self.assertEqual(auth[2]["Authorization"], "Bearer invalid")
+                self.assertNotIn("Cookie", auth[2])
+                self.assertEqual(self.swarm_requests, swarm_before)
 
     def test_telegram_cookie_reaches_swarm_remote(self):
         for path, backend, upstream_path, token in (

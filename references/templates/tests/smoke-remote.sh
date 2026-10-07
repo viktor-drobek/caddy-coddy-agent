@@ -55,6 +55,27 @@ expect "master realm anonymous -> 302" 302 "$(code $URL/auth/realms/master/.well
 expect "coddy realm discovery public -> 200" 200 "$(code $URL/auth/realms/coddy/.well-known/openid-configuration)"
 expect "OIDC issuer" "$KC_HOSTNAME/realms/coddy" "$(curl -s $R $URL/auth/realms/coddy/.well-known/openid-configuration | jsonfield '["issuer"]')"
 
+echo "== local UI CORS preflight (no credentials)"
+for path in /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/v1/models /swarm-relay/coddy/auth/me; do
+  HEADERS=$(curl -s $R -X OPTIONS -D - -o /dev/null \
+    -H 'Origin: http://localhost:18080' \
+    -H 'Access-Control-Request-Method: GET' \
+    -H 'Access-Control-Request-Headers: authorization,content-type' "$URL$path" | tr -d '\r')
+  expect "loopback OPTIONS $path -> 204" 204 "$(printf '%s\n' "$HEADERS" | awk '/^HTTP\// {print $2}')"
+  ORIGIN=$(printf '%s\n' "$HEADERS" | awk 'tolower($1) == "access-control-allow-origin:" {print $2}')
+  expect "loopback OPTIONS $path echoes only the allowed origin" http://localhost:18080 "$ORIGIN"
+  ALLOW_HEADERS=$(printf '%s\n' "$HEADERS" | awk 'tolower($1) == "access-control-allow-headers:" {print tolower($0)}')
+  contains "loopback OPTIONS $path permits Authorization" authorization "$ALLOW_HEADERS"
+  ALLOW_METHODS=$(printf '%s\n' "$HEADERS" | awk 'tolower($1) == "access-control-allow-methods:" {print $0}')
+  contains "loopback OPTIONS $path permits GET" GET "$ALLOW_METHODS"
+done
+for path in /v1/models /coddy/auth/me; do
+  expect "other-origin OPTIONS $path remains protected" 401 "$(code -X OPTIONS -H 'Origin: https://untrusted.invalid' -H 'Access-Control-Request-Method: GET' "$URL$path")"
+  expect "loopback GET $path without credentials remains protected" 401 "$(code -H 'Origin: http://localhost:18080' "$URL$path")"
+  expect "loopback GET $path with junk bearer remains protected" 401 "$(code -H 'Origin: http://localhost:18080' -H 'Authorization: Bearer junk' "$URL$path")"
+done
+expect "loopback OPTIONS outside API paths remains protected" 401 "$(code -X OPTIONS -H 'Origin: http://localhost:18080' -H 'Access-Control-Request-Method: GET' "$URL/private")"
+
 echo "== browser login (Keycloak form, temporary password, forced change)"
 C="curl -s $R -b $J -c $J -H Accept:text/html"
 $C -L $URL/ -o $TMP/login.html
