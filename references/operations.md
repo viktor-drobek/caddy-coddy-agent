@@ -79,11 +79,11 @@ with a Keycloak service token.
 ## Swarm relay
 
 When the Coddy host also runs a Swarm Relay, set `CODDY_SWARM_TOKEN` in the edge `.env` to the
-relay's `swarm.auth_token`, then redeploy. Authenticated browser traffic may use either the
-configured remote prefix `<public_url>/swarm-relay` or the absolute `/swarm/*` paths the UI uses
-after it recognises a relay. Caddy accepts both Keycloak and Telegram browser sessions, discards
-the caller's `Authorization` header and presents `CODDY_SWARM_TOKEN` only to
-`SWARM_RELAY_BACKEND`; `/swarm-relay/coddy/*` and
+relay's `swarm.auth_token`, then redeploy. Authenticated traffic may use either the configured
+remote prefix `<public_url>/swarm-relay` or the absolute `/swarm/*` paths the UI uses after it
+recognises a relay. Keycloak browser cookies and valid Keycloak Bearer tokens are verified by
+oauth2-proxy; a Telegram cookie is verified by tg-auth. Caddy replaces every caller credential
+with `CODDY_SWARM_TOKEN` only when proxying to `SWARM_RELAY_BACKEND`; `/swarm-relay/coddy/*` and
 `/swarm-relay/v1/*` remain on the ordinary Coddy backend with `CODDY_API_TOKEN`.
 
 The three Swarm credentials have different jobs:

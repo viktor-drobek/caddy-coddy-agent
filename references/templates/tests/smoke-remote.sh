@@ -46,6 +46,7 @@ contains "page load redirects to /oauth2/start" "/oauth2/start?rd=" "$(redirect 
 expect "XHR without session -> 401 (no redirect)" 401 "$(code -H 'Accept: application/json' $URL/coddy/sessions)"
 expect "EventSource without session -> 401" 401 "$(code -H 'Accept: text/event-stream' $URL/coddy/events)"
 expect "junk bearer -> 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/coddy/sessions)"
+expect "junk bearer -> swarm relay 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/info)"
 expect "swarm absolute path without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm/info)"
 expect "swarm relay prefix without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
 expect "keycloak admin console anonymous -> 302" 302 "$(code -H 'Accept: text/html' $URL/auth/admin/master/console/)"
@@ -102,6 +103,10 @@ CT=$(printf '%s' "$T" | jsonfield '.get("access_token","")')
 if [ -n "$CT" ]; then pass "coddy-cli token issued"; else fail "coddy-cli token issued" "$T"; fi
 expect "coddy-cli token lifetime 7 days" 604800 "$(printf '%s' "$T" | jsonfield '.get("expires_in")')"
 expect "coddy-cli token -> /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/coddy/sessions)"
+if [ -n "${CODDY_SWARM_TOKEN:-}" ]; then
+  expect "coddy-cli token -> swarm absolute /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm/info)"
+  expect "coddy-cli token -> swarm prefixed /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm-relay/swarm/info)"
+fi
 MODELS=$(curl -s $R -H "Authorization: Bearer $CT" $URL/v1/models | jsonfield '.get("data",[]).__len__()')
 if [ "${MODELS:-0}" -gt 0 ] 2>/dev/null; then pass "/v1/models lists $MODELS models"; else fail "/v1/models" "$MODELS"; fi
 VER=$(curl -s $R -H "Authorization: Bearer $CT" $URL/openapi.json | jsonfield '["info"]["version"]')

@@ -8,6 +8,26 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.2.3] - 2026-10-07
+
+Proven on the reference deployment against Coddy 1.2.81: Caddy was recreated and
+all 59 end-to-end smoke checks passed.
+
+### Fixed
+
+- Relay endpoints now accept a valid Keycloak Bearer token as well as Keycloak and
+  Telegram browser sessions. oauth2-proxy validates the caller token before Caddy
+  replaces it with the isolated `CODDY_SWARM_TOKEN` for the relay upstream.
+- A Relay request carrying an invalid Bearer token now fails with `401` instead of
+  falling through to the browser-session path.
+
+### Added
+
+- Smoke coverage for invalid Bearer rejection and for a `coddy-cli` access token on
+  both absolute `/swarm/info` and prefixed `/swarm-relay/swarm/info` Relay paths.
+- Operations documentation that distinguishes validated Keycloak caller credentials
+  from the internal token Caddy presents to the Relay.
+
 ## [1.2.2] - 2026-10-07
 
 ### Fixed

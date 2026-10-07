@@ -77,15 +77,19 @@
 	}
 }
 
-# Swarm URLs are handled before the general Telegram and Keycloak routes below,
-# so select the matching browser-session verifier here. A Telegram cookie takes
-# precedence and fails closed when it is stale; all other callers use Keycloak.
+# Swarm URLs are handled before the general Telegram and Keycloak routes below.
+# A Telegram cookie takes precedence and fails closed when it is stale. A valid
+# Keycloak Bearer token is checked unchanged by oauth2-proxy; cookie and
+# anonymous callers use the browser-session check with caller auth removed.
 (swarm_browser_auth) {
 	reverse_proxy @tg_session {env.TG_AUTH_BACKEND} {
 		import tg_auth
 		header_up -Authorization
 	}
-	reverse_proxy @non_tg_session {env.OAUTH2_PROXY_BACKEND} {
+	reverse_proxy @swarm_bearer {env.OAUTH2_PROXY_BACKEND} {
+		import oauth2_auth
+	}
+	reverse_proxy @swarm_cookie_session {env.OAUTH2_PROXY_BACKEND} {
 		import oauth2_auth
 		header_up -Authorization
 	}
@@ -170,7 +174,14 @@
 	}
 
 	@tg_session header Cookie *_coddy_tg=*
-	@non_tg_session not header Cookie *_coddy_tg=*
+	@swarm_bearer {
+		not header Cookie *_coddy_tg=*
+		header Authorization Bearer*
+	}
+	@swarm_cookie_session {
+		not header Cookie *_coddy_tg=*
+		not header Authorization Bearer*
+	}
 	handle /swarm-relay/coddy/* {
 		route {
 			import swarm_browser_auth
