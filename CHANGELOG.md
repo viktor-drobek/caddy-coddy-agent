@@ -8,6 +8,16 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.2.2] - 2026-10-07
+
+### Fixed
+
+- Caddy now answers Relay CORS preflight requests from `http://localhost:18080` before
+  browser-session authentication. The subsequent Relay request still requires the existing
+  Keycloak or Telegram authentication path and receives the isolated Relay token only at Caddy.
+- `validate.sh` now excludes agent and editor directories when it checks a rendered project, so
+  unrelated helper files with a `.sh` suffix cannot make the deployment validator fail.
+
 ## [1.2.1] - 2026-09-25
 
 ### Fixed

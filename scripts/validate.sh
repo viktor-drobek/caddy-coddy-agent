@@ -24,7 +24,7 @@ run() { # run <label> <command...>
 skip() { printf 'SKIP  %s\n' "$1"; skipped=$((skipped + 1)); }
 fail() { printf 'FAIL  %s\n' "$1"; failed=$((failed + 1)); }
 # Project files only: not the agent checkout, git internals or agent folders.
-project_files() { find . \( -path ./.git -o -path ./tools -o -path ./.coddy -o -path ./memory -o -path ./.relay \) -prune -o -type f -name "$1" -print0 | sort -z; }
+project_files() { find . \( -path ./.git -o -path ./tools -o -path ./.agents -o -path ./.claude -o -path ./.cursor -o -path ./.codex -o -path ./.wrangler -o -path ./.coddy -o -path ./memory -o -path ./.relay \) -prune -o -type f -name "$1" -print0 | sort -z; }
 
 echo "== shell syntax"
 while IFS= read -r -d '' f; do run "bash -n ${f#./}" bash -n "$f"; done < <(project_files '*.sh')

@@ -149,6 +149,26 @@
 	# client token. ---
 	# The remote environment also requests the relay host's own Coddy API. Keep
 	# those requests on CODDY_BACKEND; only /swarm/* belongs to the relay port.
+	# A loopback-hosted Coddy UI must preflight cross-origin Relay requests before
+	# the browser sends credentials. Keep this narrow: only the known local origin
+	# bypasses forward_auth, and every non-OPTIONS request remains authenticated.
+	@swarm_loopback_preflight {
+		method OPTIONS
+		path /swarm/* /swarm-relay/*
+		header Origin http://localhost:18080
+	}
+	handle @swarm_loopback_preflight {
+		header {
+			Access-Control-Allow-Origin http://localhost:18080
+			Access-Control-Allow-Credentials true
+			Access-Control-Allow-Methods "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS"
+			Access-Control-Allow-Headers "Authorization, Content-Type, X-Coddy-Session-ID, Last-Event-ID, Range, If-None-Match"
+			Access-Control-Max-Age 600
+			Vary Origin
+		}
+		respond 204
+	}
+
 	@tg_session header Cookie *_coddy_tg=*
 	@non_tg_session not header Cookie *_coddy_tg=*
 	handle /swarm-relay/coddy/* {
