@@ -8,6 +8,18 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.0] - 2026-10-18
+
+Proven on the reference deployment against Coddy 1.3.23: all 90 end-to-end
+smoke checks passed, together with 34 local regression checks.
+
+### Changed
+
+- Declared compatibility of the rendered Caddy, Keycloak, oauth2-proxy and
+  Telegram Mini App templates with Coddy 1.3.23.
+- Recorded the successful verification date and current Coddy version in the
+  agent manifest so newly rendered projects identify the tested release.
+
 ## [1.2.4] - 2026-10-07
 
 Proven on the reference deployment against Coddy 1.2.81: all 90 end-to-end
