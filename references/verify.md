@@ -25,8 +25,10 @@ or `FAIL` lines:
   cookie, sign-out ends the session;
 - **Swarm Relay** (when `CODDY_SWARM_TOKEN` is set): anonymous absolute and prefixed relay paths
   return 401; the browser cookie reaches `/swarm/info`, `/swarm-relay/swarm/info` and the relay
-  host's `/swarm-relay/v1/models`; aggregated sessions have no per-node `warnings` such as
-  `swarm-ml: 401 Unauthorized`;
+  host's `/swarm-relay/v1/models`; the test discovers an online node and checks its mounted
+  OpenAPI, `/coddy/auth/me`, `/coddy/sessions` and `/v1/models` paths through the Relay.
+  The same mounted Coddy and OpenAI routes are checked with service, CLI and Telegram credentials.
+  Aggregated sessions have no per-node `warnings` such as `swarm-ml: 401 Unauthorized`;
 - **service**: a `coddy-service` client_credentials token with audience `coddy-web`, authenticated
   at `/coddy/auth/me`, `/coddy/sessions` 200;
 - **person**: a `coddy-cli` password-grant token with a 7-day lifetime, `/coddy/sessions` 200,

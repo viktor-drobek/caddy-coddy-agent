@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.3.0
+version: 1.3.1
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -49,6 +49,12 @@ Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
   `/swarm-relay/*` branches. A route declared before the general Telegram handler must explicitly
   select tg-auth for `_coddy_tg` and oauth2-proxy otherwise. Preserve the separate Coddy and Swarm
   upstream token substitutions after either browser-session check succeeds.
+- A mounted node's entire API is a Relay route. Send
+  `/swarm-relay/swarm/nodes/<name>/*` (after stripping `/swarm-relay`) to
+  `SWARM_RELAY_BACKEND` with `CODDY_SWARM_TOKEN`, never to `CODDY_BACKEND` with
+  `CODDY_API_TOKEN`. The Relay presents the node credential itself. `/swarm/info` is the Relay's
+  own endpoint, so a mounted ordinary node may correctly return `404` for
+  `/swarm/nodes/<name>/swarm/info`.
 - Treat “local relay is unreachable or unauthorized” as a symptom, not a diagnosis. Correlate the
   failing path and status across Caddy, tg-auth and oauth2-proxy. A successful `/tg/auth/login` plus
   `200` on `/coddy/*` but `401` on `/swarm/*` means route-specific authentication is missing, not

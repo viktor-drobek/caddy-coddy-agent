@@ -54,8 +54,10 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
    old) of a user in `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody, and the
    `/tg/auth/verify` endpoint is never public.
 9. Swarm credentials stay isolated: Caddy sends `CODDY_SWARM_TOKEN` only to
-   `SWARM_RELAY_BACKEND` for `/swarm/*`, while `/swarm-relay/coddy/*` and
-   `/swarm-relay/v1/*` use `CODDY_API_TOKEN` and the ordinary Coddy backend. Every node's
+   `SWARM_RELAY_BACKEND` for `/swarm/*` and every mounted node API under
+   `/swarm-relay/swarm/nodes/<name>/*`, while `/swarm-relay/coddy/*` and
+   `/swarm-relay/v1/*` use `CODDY_API_TOKEN` and the ordinary Coddy backend. The Relay replaces
+   its own client token with the node credential. Every node's
    `swarm.join[].token` must equal its own `httpserver.auth_token`; otherwise the node remains
    visible but fan-out responses contain `<node>: 401 Unauthorized` warnings. Every browser
    route under these prefixes accepts a verified Telegram cookie or a valid Keycloak session.

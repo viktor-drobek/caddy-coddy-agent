@@ -47,6 +47,7 @@ expect "XHR without session -> 401 (no redirect)" 401 "$(code -H 'Accept: applic
 expect "EventSource without session -> 401" 401 "$(code -H 'Accept: text/event-stream' $URL/coddy/events)"
 expect "junk bearer -> 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/coddy/sessions)"
 expect "junk bearer -> swarm relay 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/info)"
+expect "junk bearer -> swarm node API 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/nodes/unreachable/coddy/auth/me)"
 expect "swarm absolute path without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm/info)"
 expect "swarm relay prefix without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
 expect "keycloak admin console anonymous -> 302" 302 "$(code -H 'Accept: text/html' $URL/auth/admin/master/console/)"
@@ -56,7 +57,7 @@ expect "coddy realm discovery public -> 200" 200 "$(code $URL/auth/realms/coddy/
 expect "OIDC issuer" "$KC_HOSTNAME/realms/coddy" "$(curl -s $R $URL/auth/realms/coddy/.well-known/openid-configuration | jsonfield '["issuer"]')"
 
 echo "== local UI CORS preflight (no credentials)"
-for path in /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/v1/models /swarm-relay/coddy/auth/me; do
+for path in /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/v1/models /swarm-relay/coddy/auth/me /swarm-relay/swarm/nodes/test-node/coddy/auth/me; do
   HEADERS=$(curl -s $R -X OPTIONS -D - -o /dev/null \
     -H 'Origin: http://localhost:18080' \
     -H 'Access-Control-Request-Method: GET' \
@@ -106,6 +107,24 @@ else
   expect "swarm sessions response has a warnings array" valid "$SHAPE"
   WARNINGS=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["warnings"]))' "$SWARM_SESSIONS" 2>/dev/null || echo invalid)
   expect "swarm fan-out has no node warnings" 0 "$WARNINGS"
+
+  SWARM_NODES="$TMP/swarm-nodes.json"
+  expect "swarm nodes via cookie -> 200" 200 "$($C -o "$SWARM_NODES" -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/swarm/nodes)"
+  SWARM_NODE=$(python3 - "$SWARM_NODES" <<'PY'
+import json, sys
+nodes = json.load(open(sys.argv[1])).get("nodes", [])
+print(next((node.get("name", "") for node in nodes if node.get("online")), ""))
+PY
+)
+  if [ -n "$SWARM_NODE" ]; then
+    NODE_MOUNT="$URL/swarm-relay/swarm/nodes/$SWARM_NODE"
+    expect "swarm node OpenAPI via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/openapi.json)"
+    expect "swarm node /coddy/auth/me via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/coddy/auth/me)"
+    expect "swarm node /coddy/sessions via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$NODE_MOUNT/coddy/sessions?limit=1")"
+    expect "swarm node /v1/models via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/v1/models)"
+  else
+    fail "swarm node mount discovery" "no online node returned by /swarm/nodes"
+  fi
 fi
 $C -o /dev/null "$URL/oauth2/sign_out?rd=$URL/"
 expect "after sign_out page load -> 302 again" 302 "$($C -o /dev/null -w '%{http_code}' $URL/)"
@@ -117,6 +136,10 @@ P=$(printf '%s' "$ST" | cut -d. -f2); AUD=$(printf '%s' "$P" | python3 -c 'impor
 contains "service token audience includes coddy-web" "coddy-web" "$AUD"
 contains "service token -> /coddy/auth/me authenticated" '"authenticated":true' "$(curl -s $R -H "Authorization: Bearer $ST" $URL/coddy/auth/me)"
 expect "service token -> /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $ST" $URL/coddy/sessions)"
+if [ -n "${CODDY_SWARM_TOKEN:-}" ] && [ -n "${SWARM_NODE:-}" ]; then
+  expect "service token -> swarm node /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $ST" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
+  expect "service token -> swarm node /v1/models 200" 200 "$(code -H "Authorization: Bearer $ST" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/v1/models")"
+fi
 
 echo "== person: password grant (coddy-cli)"
 T=$(curl -s $R -X POST $KC/token -d grant_type=password -d client_id=coddy-cli -d scope=openid -d username="$U" --data-urlencode "password=$NEWPW")
@@ -127,6 +150,9 @@ expect "coddy-cli token -> /coddy/sessions 200" 200 "$(code -H "Authorization: B
 if [ -n "${CODDY_SWARM_TOKEN:-}" ]; then
   expect "coddy-cli token -> swarm absolute /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm/info)"
   expect "coddy-cli token -> swarm prefixed /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm-relay/swarm/info)"
+  if [ -n "${SWARM_NODE:-}" ]; then
+    expect "coddy-cli token -> swarm node /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $CT" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
+  fi
 fi
 MODELS=$(curl -s $R -H "Authorization: Bearer $CT" $URL/v1/models | jsonfield '.get("data",[]).__len__()')
 if [ "${MODELS:-0}" -gt 0 ] 2>/dev/null; then pass "/v1/models lists $MODELS models"; else fail "/v1/models" "$MODELS"; fi
@@ -173,6 +199,10 @@ PYSIGN
     expect "telegram cookie -> swarm absolute path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm/info)"
     expect "telegram cookie -> swarm prefixed path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
     expect "telegram cookie -> swarm remote root 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
+    if [ -n "${SWARM_NODE:-}" ]; then
+      expect "telegram cookie -> swarm node /coddy/sessions 200" 200 "$(code -b $TJ -H 'Accept: application/json' "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
+      expect "telegram cookie -> swarm node /v1/models 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/swarm/nodes/$SWARM_NODE/v1/models)"
+    fi
   fi
   expect "signed initData of a user not on the list -> 403" 403 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $OTHER 0)" $URL/tg/auth/login)"
   expect "tampered initData -> 401" 401 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $ALLOWED 0 break)" $URL/tg/auth/login)"

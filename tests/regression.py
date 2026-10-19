@@ -147,10 +147,12 @@ esac''')
         self.assertRegex(handler, r'Access-Control-Allow-Headers "Authorization,')
         self.assertNotIn("reverse_proxy", handler)
         self.assertNotIn("import ", handler)
-        for protected in ("handle /swarm-relay/coddy/*", "handle /swarm/*",
+        for protected in ("handle /swarm-relay/coddy/*", "handle /swarm-relay/swarm/nodes/*", "handle /swarm/*",
                           "handle @tg", "handle @bearer", "handle @page"):
             with self.subTest(protected=protected):
                 self.assertLess(config.index("handle @swarm_loopback_preflight"), config.index(protected))
+        self.assertLess(config.index("handle /swarm-relay/swarm/nodes/*"),
+                        config.index("handle /swarm-relay/*"))
 
     def deploy_trace(self, changes):
         edge = self.base / "edge"
@@ -294,7 +296,9 @@ class ProxyTest(SiteFixture):
 
     PREFLIGHT_PATHS = ("/v1/models", "/coddy/auth/me", "/swarm/topology",
                        "/swarm-relay/swarm/topology", "/swarm-relay/v1/models",
-                       "/swarm-relay/coddy/auth/me")
+                       "/swarm-relay/coddy/auth/me",
+                       "/swarm-relay/swarm/nodes/ml/coddy/auth/me",
+                       "/swarm-relay/swarm/nodes/ml/v1/models")
 
     def test_loopback_api_preflight_bypasses_auth_and_backends(self):
         for path in self.PREFLIGHT_PATHS:
@@ -404,6 +408,25 @@ class ProxyTest(SiteFixture):
                 auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
                 self.assertNotIn("Authorization", auth[2])
 
+    def test_swarm_node_mount_uses_relay_token_for_the_complete_api(self):
+        paths = (
+            ("/swarm-relay/swarm/nodes/ml/openapi.json", "/swarm/nodes/ml/openapi.json"),
+            ("/swarm-relay/swarm/nodes/ml/coddy/auth/me", "/swarm/nodes/ml/coddy/auth/me"),
+            ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "/swarm/nodes/ml/coddy/sessions"),
+            ("/swarm-relay/swarm/nodes/ml/coddy/sessions/sess-1/changes", "/swarm/nodes/ml/coddy/sessions/sess-1/changes"),
+            ("/swarm-relay/swarm/nodes/ml/v1/models", "/swarm/nodes/ml/v1/models"),
+        )
+        for path, upstream_path in paths:
+            with self.subTest(path=path):
+                status, _, body = self.request(path, {"Cookie": "session=valid"})
+                self.assertEqual(status, 200)
+                upstream = json.loads(body)
+                self.assertEqual(upstream["backend"], "swarm")
+                self.assertEqual(upstream["headers"]["Authorization"], "Bearer test-swarm-token")
+                self.assertEqual(self.swarm_requests[-1][0], upstream_path)
+                auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
+                self.assertNotIn("Authorization", auth[2])
+
     def test_swarm_remote_root_uses_coddy_backend_token(self):
         for path, upstream_path in (
                 ("/swarm-relay/coddy/auth/me", "/coddy/auth/me"),
@@ -425,7 +448,9 @@ class ProxyTest(SiteFixture):
                 ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
-                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token")):
+                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token"),
+                ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "swarm", "/swarm/nodes/ml/coddy/sessions", "test-swarm-token"),
+                ("/swarm-relay/swarm/nodes/ml/v1/models", "swarm", "/swarm/nodes/ml/v1/models", "test-swarm-token")):
             with self.subTest(path=path):
                 before = len(self.requests)
                 swarm_before = len(self.swarm_requests)
@@ -468,7 +493,9 @@ class ProxyTest(SiteFixture):
                 ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
-                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token")):
+                ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token"),
+                ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "swarm", "/swarm/nodes/ml/coddy/sessions", "test-swarm-token"),
+                ("/swarm-relay/swarm/nodes/ml/v1/models", "swarm", "/swarm/nodes/ml/v1/models", "test-swarm-token")):
             with self.subTest(path=path):
                 status, _, body = self.request(path, {
                     "Cookie": "_coddy_tg=valid", "Authorization": "Bearer caller-token"})

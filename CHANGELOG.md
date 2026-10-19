@@ -8,6 +8,28 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.1] - 2026-10-19
+
+Proven on the reference deployment against Coddy 1.3.28: all 105 end-to-end
+smoke checks passed, together with 35 local regression checks.
+
+### Fixed
+
+- Declared `/swarm-relay/swarm/nodes/<name>/*` as an explicit Relay route.
+  It now always receives `CODDY_SWARM_TOKEN` after caller authentication, while
+  the Relay presents the node credential to the mounted Coddy API.
+- Kept the relay host API (`/swarm-relay/coddy/*` and `/swarm-relay/v1/*`)
+  separate from mounted node APIs, which prevents token and backend confusion.
+
+### Added
+
+- Regression coverage for mounted node OpenAPI, Coddy, session and OpenAI API
+  paths through cookie, bearer and Telegram authentication.
+- Deployed smoke coverage that discovers an online node and verifies its
+  mounted API with browser, service, CLI and Telegram credentials.
+- Documentation of the token boundary and of the expected `404` for
+  `/swarm/nodes/<name>/swarm/info` when that mounted node is not a Relay.
+
 ## [1.3.0] - 2026-10-18
 
 Proven on the reference deployment against Coddy 1.3.23: all 90 end-to-end

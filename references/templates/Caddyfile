@@ -110,6 +110,21 @@
 	}
 }
 
+# A Relay owns every route below /swarm, including a mounted node's complete
+# /coddy/* and /v1/* API. The Relay authenticates to that node itself, so Caddy
+# must send only its client token and never the node's Coddy HTTP token.
+(swarm_upstream) {
+	reverse_proxy {env.SWARM_RELAY_BACKEND} {
+		header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
+		header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
+		flush_interval -1
+		transport http {
+			read_timeout 0
+			write_timeout 0
+		}
+	}
+}
+
 @@PUBLIC_URL@@ {
 	# --- Keycloak (KC_HTTP_RELATIVE_PATH=/auth, KC_PROXY_HEADERS=xforwarded) ---
 	handle /auth/* {
@@ -196,19 +211,20 @@
 			import coddy_upstream
 		}
 	}
+	# A mounted node is a Relay route, not the relay host's own API. Its complete
+	# Coddy and OpenAI-compatible surfaces stay behind the Relay client token.
+	handle /swarm-relay/swarm/nodes/* {
+		route {
+			import swarm_browser_auth
+			uri strip_prefix /swarm-relay
+			import swarm_upstream
+		}
+	}
 	handle /swarm-relay/* {
 		route {
 			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
-			reverse_proxy {env.SWARM_RELAY_BACKEND} {
-				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
-				header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
-				flush_interval -1
-				transport http {
-					read_timeout 0
-					write_timeout 0
-				}
-			}
+			import swarm_upstream
 		}
 	}
 
@@ -217,15 +233,7 @@
 	handle /swarm/* {
 		route {
 			import swarm_browser_auth
-			reverse_proxy {env.SWARM_RELAY_BACKEND} {
-				header_up Authorization "Bearer {env.CODDY_SWARM_TOKEN}"
-				header_up X-Forwarded-User {http.request.header.X-Auth-Request-Preferred-Username}
-				flush_interval -1
-				transport http {
-					read_timeout 0
-					write_timeout 0
-				}
-			}
+			import swarm_upstream
 		}
 	}
 

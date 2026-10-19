@@ -35,14 +35,16 @@ under `keycloak/`.
    `TG_ALLOWED_USER_IDS`; an empty token or list admits nobody. Its cookie is signed with
    `TG_AUTH_COOKIE_SECRET`, `/tg/auth/verify` answers 404 to the internet, identity headers come
    only from the verify response, and the Coddy token swap applies as for every other caller.
-9. **Swarm credentials stay in their own lanes.** `/swarm-relay/swarm/*` (with the prefix
-   removed) and absolute `/swarm/*` go to `SWARM_RELAY_BACKEND` only after tg-auth accepts a
+9. **Swarm credentials stay in their own lanes.** `/swarm-relay/swarm/*`, including every mounted
+   node API under `/swarm-relay/swarm/nodes/<name>/{coddy,v1}/*`, and absolute `/swarm/*` go to
+   `SWARM_RELAY_BACKEND` only after tg-auth accepts a
    Telegram cookie or oauth2-proxy accepts the other browser session; Caddy removes any caller
    `Authorization` and sends
    `Bearer <CODDY_SWARM_TOKEN>`. `/swarm-relay/coddy/*` and `/swarm-relay/v1/*` instead go to
    `CODDY_BACKEND` with `CODDY_API_TOKEN`, because they describe the relay host's own Coddy API.
-   The relay client token must never reach Coddy, and Coddy's HTTP token must never be used as the
-   relay client token. Inside the swarm, every `swarm.join[].token` must match that node's own
+   The Relay replaces its client token with the mounted node's own credential. The relay client
+   token must never reach Coddy, and Coddy's HTTP token must never be used as the relay client
+   token. Inside the swarm, every `swarm.join[].token` must match that node's own
    `httpserver.auth_token`; a mismatch leaves the node visible but degrades fan-out responses with
    `<node>: 401 Unauthorized` warnings.
 
