@@ -8,6 +8,27 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.3] - 2026-10-19
+
+Proven on the reference deployment against Coddy 1.3.28: all 110 end-to-end
+smoke checks passed, together with 37 local regression checks.
+
+### Fixed
+
+- Passed signed canvas frame URLs mounted below
+  `/swarm-relay/swarm/nodes/<name>/coddy/canvas/<capability>/...` directly to
+  the Relay without Keycloak, Telegram or relay credentials. The Relay now
+  performs the capability check and returns wildcard CORS for the canvas
+  iframe's opaque `null` origin as required by Coddy.
+
+### Added
+
+- Regression coverage for the exact canvas capability matcher, its precedence
+  over general node APIs, and removal of `Authorization` and cookies before
+  proxying to the Relay.
+- Security-contract guidance distinguishing the signed canvas capability from
+  every ordinary node API route.
+
 ## [1.3.2] - 2026-10-19
 
 Proven on the reference deployment against Coddy 1.3.28: all 110 end-to-end

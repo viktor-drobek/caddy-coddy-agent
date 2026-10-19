@@ -63,6 +63,10 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
    `swarm.join[].token` must equal its own `httpserver.auth_token`; otherwise the node remains
    visible but fan-out responses contain `<node>: 401 Unauthorized` warnings. Every browser
    route under these prefixes accepts a verified Telegram cookie or a valid Keycloak session.
+   The sole exception is the signed canvas capability path
+   `/swarm-relay/swarm/nodes/<name>/coddy/canvas/<capability>/...`: only `GET`, `HEAD` and
+   `OPTIONS` bypass edge authentication and reach the Relay without `Authorization` or cookies.
+   The Relay validates the capability and owns its `Access-Control-Allow-Origin: *` response.
 
 ## Working on the stack
 

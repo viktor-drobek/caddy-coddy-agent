@@ -147,12 +147,14 @@ esac''')
         self.assertRegex(handler, r'Access-Control-Allow-Headers "Authorization,')
         self.assertNotIn("reverse_proxy", handler)
         self.assertNotIn("import ", handler)
-        for protected in ("handle /swarm-relay/coddy/*", "handle /swarm-relay/swarm/nodes/*", "handle /swarm/*",
+        for protected in ("handle @swarm_canvas_capability", "handle /swarm-relay/coddy/*", "handle /swarm-relay/swarm/nodes/*", "handle /swarm/*",
                           "handle @tg", "handle @bearer", "handle @page"):
             with self.subTest(protected=protected):
                 self.assertLess(config.index("handle @swarm_loopback_preflight"), config.index(protected))
         self.assertLess(config.index("handle /swarm-relay/swarm/nodes/*"),
                         config.index("handle /swarm-relay/*"))
+        self.assertLess(config.index("handle @swarm_canvas_capability"),
+                        config.index("handle /swarm-relay/swarm/nodes/*"))
 
     def deploy_trace(self, changes):
         edge = self.base / "edge"
@@ -448,6 +450,27 @@ class ProxyTest(SiteFixture):
                 self.assertEqual(self.swarm_requests[-1][0], upstream_path)
                 auth = [request for request in self.requests if request[0] == "/oauth2/auth"][-1]
                 self.assertNotIn("Authorization", auth[2])
+
+    def test_swarm_canvas_capability_bypasses_user_and_relay_tokens(self):
+        path = "/swarm-relay/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"
+        upstream_path = "/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"
+        for method in ("GET", "HEAD", "OPTIONS"):
+            with self.subTest(method=method):
+                before = len(self.requests)
+                swarm_before = len(self.swarm_requests)
+                status, _, body = self.request(path, {
+                    "Authorization": "Bearer caller-token", "Cookie": "session=valid", "Origin": "null"}, method)
+                self.assertEqual(status, 200)
+                self.assertEqual(len(self.requests), before)
+                self.assertEqual(len(self.swarm_requests), swarm_before + 1)
+                upstream = self.swarm_requests[-1]
+                self.assertEqual(upstream[0:2], (upstream_path, method))
+                self.assertNotIn("Authorization", upstream[2])
+                self.assertNotIn("Cookie", upstream[2])
+                if method == "HEAD":
+                    self.assertEqual(body, b"")
+                else:
+                    self.assertEqual(json.loads(body)["backend"], "swarm")
 
     def test_swarm_remote_root_uses_coddy_backend_token(self):
         for path, upstream_path in (
