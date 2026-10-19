@@ -55,6 +55,9 @@ expect "keycloak admin API anonymous -> 302" 302 "$(code -H 'Accept: application
 expect "master realm anonymous -> 302" 302 "$(code $URL/auth/realms/master/.well-known/openid-configuration)"
 expect "coddy realm discovery public -> 200" 200 "$(code $URL/auth/realms/coddy/.well-known/openid-configuration)"
 expect "OIDC issuer" "$KC_HOSTNAME/realms/coddy" "$(curl -s $R $URL/auth/realms/coddy/.well-known/openid-configuration | jsonfield '["issuer"]')"
+for path in /manifest.webmanifest /icon-192.png /icon-512.png /icon-maskable-512.png; do
+  expect "public PWA asset $path -> 200" 200 "$(code "$URL$path")"
+done
 
 echo "== local UI CORS preflight (no credentials)"
 for path in /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/v1/models /swarm-relay/coddy/auth/me /swarm-relay/swarm/nodes/test-node/coddy/auth/me; do
@@ -120,8 +123,20 @@ PY
     NODE_MOUNT="$URL/swarm-relay/swarm/nodes/$SWARM_NODE"
     expect "swarm node OpenAPI via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/openapi.json)"
     expect "swarm node /coddy/auth/me via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/coddy/auth/me)"
-    expect "swarm node /coddy/sessions via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$NODE_MOUNT/coddy/sessions?limit=1")"
+    NODE_SESSIONS="$TMP/node-sessions.json"
+    expect "swarm node /coddy/sessions via cookie -> 200" 200 "$($C -o "$NODE_SESSIONS" -w '%{http_code}' -H 'Accept: application/json' "$NODE_MOUNT/coddy/sessions?limit=1")"
     expect "swarm node /v1/models via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/v1/models)"
+    NODE_SESSION=$(python3 - "$NODE_SESSIONS" <<'PY'
+import json, sys
+sessions = json.load(open(sys.argv[1])).get("sessions", [])
+print(sessions[0].get("id", "") if sessions else "")
+PY
+)
+    if [ -n "$NODE_SESSION" ]; then
+      expect "swarm node session /changes via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' "$NODE_MOUNT/coddy/sessions/$NODE_SESSION/changes")"
+    else
+      pass "swarm node session /changes skipped without sessions"
+    fi
   else
     fail "swarm node mount discovery" "no online node returned by /swarm/nodes"
   fi

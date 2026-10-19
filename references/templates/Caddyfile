@@ -163,6 +163,17 @@
 		reverse_proxy {env.OAUTH2_PROXY_BACKEND}
 	}
 
+	# A browser fetches PWA metadata and manifest-declared icons without its
+	# application session. Keep this public surface exact and read-only; Caddy
+	# still uses Coddy's internal token when it obtains the static resources.
+	@public_pwa_assets {
+		method GET HEAD
+		path /manifest.webmanifest /icon-192.png /icon-512.png /icon-maskable-512.png
+	}
+	handle @public_pwa_assets {
+		import coddy_upstream
+	}
+
 	# --- Coddy swarm relay: authenticate the browser session through oauth2-proxy,
 	# or tg-auth, then replace the caller's Authorization header with the relay
 	# client token. ---

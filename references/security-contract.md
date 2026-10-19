@@ -53,6 +53,10 @@ Also load-bearing:
 - The expanded `forward_auth` handler copies every `Set-Cookie` response header to the browser,
   including split cookies and cookie deletion on redirects. Without this, the browser keeps
   stale tokens after oauth2-proxy's five-minute refresh.
+- The only anonymous Coddy resources are `GET` and `HEAD` for the PWA manifest and its three
+  declared icons: `/manifest.webmanifest`, `/icon-192.png`, `/icon-512.png` and
+  `/icon-maskable-512.png`. Caddy still adds `CODDY_API_TOKEN` upstream. Do not turn this exact
+  allow-list into a broad static-file or API exception.
 - `cookie_csrf_per_request = true`, `cookie_csrf_expire = "2h"` and Keycloak's
   `accessCodeLifespanLogin = 3600`: a slow first login, password change included, must not end in
   "Unable to find a valid CSRF token".

@@ -39,6 +39,8 @@ runs on @@EDGE_NAME@@. Deploy from any checkout with ssh access to `@@EDGE_SSH@@
 
 1. Clients never learn Coddy's token; Coddy never sees Keycloak tokens (Caddy's `header_up
    Authorization`; oauth2-proxy's `pass_authorization_header = false`).
+   Only `GET` and `HEAD` for the PWA manifest and its declared icons are public; Caddy still
+   sends them upstream with `CODDY_API_TOKEN`. Do not broaden that exact allow-list.
 2. Only `Accept: text/html` page loads without a session are redirected to `/oauth2/start`;
    XHR, SSE and bad bearer tokens get a plain `401`, never a redirect.
 3. oauth2-proxy verifies the issuer `@@PUBLIC_URL@@/auth/realms/coddy` and the audience

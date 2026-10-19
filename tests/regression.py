@@ -238,6 +238,7 @@ class ProxyTest(SiteFixture):
                         self.wfile.write(json.dumps({"backend": backend, "method": self.command,
                                                     "body": body, "headers": dict(self.headers)}).encode())
 
+                do_HEAD = do_GET
                 do_POST = do_GET
                 do_OPTIONS = do_GET
 
@@ -379,6 +380,27 @@ class ProxyTest(SiteFixture):
                 status, response_headers, _ = self.request(path, headers)
                 self.assertEqual(status, expected)
                 self.assertIn(("Set-Cookie", "session=; Max-Age=0; Path=/"), response_headers)
+
+    def test_only_declared_pwa_assets_bypass_user_auth(self):
+        for path in ("/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/icon-maskable-512.png"):
+            for method in ("GET", "HEAD"):
+                with self.subTest(path=path, method=method):
+                    before = len(self.requests)
+                    status, _, body = self.request(path, method=method)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(len(self.requests), before + 1)
+                    upstream = self.requests[-1]
+                    self.assertNotEqual(upstream[0], "/oauth2/auth")
+                    self.assertEqual(upstream[2]["Authorization"], "Bearer test-coddy-token")
+                    if method == "GET":
+                        backend = json.loads(body)
+                        self.assertEqual(backend["backend"], "coddy")
+                    else:
+                        self.assertEqual(body, b"")
+
+        for path, method in (("/icon-unknown.png", "GET"), ("/manifest.webmanifest", "POST")):
+            with self.subTest(path=path, method=method):
+                self.assert_protected_request(path, method=method)
 
     def test_post_body_and_token_isolation(self):
         status, _, body = self.request("/coddy/sessions", {"Authorization": "Bearer valid"}, "POST", "payload")

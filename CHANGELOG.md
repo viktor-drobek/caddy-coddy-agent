@@ -8,6 +8,24 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.2] - 2026-10-19
+
+Proven on the reference deployment against Coddy 1.3.28: all 110 end-to-end
+smoke checks passed, together with 36 local regression checks.
+
+### Fixed
+
+- Served the Coddy PWA manifest and its three manifest-declared icons without a
+  browser session, preventing browser-console `401` errors during PWA manifest
+  loading. The public allow-list is limited to `GET` and `HEAD` for those four
+  paths; Caddy still authenticates upstream with `CODDY_API_TOKEN`.
+
+### Added
+
+- Smoke coverage for the PWA manifest and each declared icon.
+- A live node-mount session `/changes` check, so a Coddy-side `500` on change
+  discovery fails verification instead of appearing only in the web console.
+
 ## [1.3.1] - 2026-10-19
 
 Proven on the reference deployment against Coddy 1.3.28: all 105 end-to-end
