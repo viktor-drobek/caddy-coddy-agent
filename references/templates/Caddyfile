@@ -192,14 +192,15 @@
 	# --- Coddy swarm relay: authenticate the browser session through oauth2-proxy,
 	# or tg-auth, then replace the caller's Authorization header with the relay
 	# client token. ---
-	# The remote environment also requests the relay host's own Coddy API. Keep
-	# those requests on CODDY_BACKEND; only /swarm/* belongs to the relay port.
+	# The remote environment also requests the relay host's complete Coddy root,
+	# including its OpenAPI documents. Keep it on CODDY_BACKEND; only /swarm/*
+	# belongs to the relay port.
 	# A loopback-hosted Coddy UI must preflight cross-origin Coddy API and Relay
 	# requests before the browser sends credentials. Only the known local origin
 	# bypasses forward_auth, and every non-OPTIONS request remains authenticated.
 	@swarm_loopback_preflight {
 		method OPTIONS
-		path /swarm/* /swarm-relay/* /v1/* /coddy/*
+		path /openapi.json /openapi.yaml /swarm/* /swarm-relay/* /v1/* /coddy/*
 		header Origin http://localhost:18080
 	}
 	handle @swarm_loopback_preflight {
@@ -236,23 +237,19 @@
 			import swarm_canvas_upstream
 		}
 	}
-	handle /swarm-relay/coddy/* {
-		route {
-			import swarm_browser_auth
-			uri strip_prefix /swarm-relay
-			import coddy_upstream
-		}
-	}
-	handle /swarm-relay/v1/* {
-		route {
-			import swarm_browser_auth
-			uri strip_prefix /swarm-relay
-			import coddy_upstream
-		}
-	}
 	# A mounted node is a Relay route, not the relay host's own API. Its complete
 	# Coddy and OpenAI-compatible surfaces stay behind the Relay client token.
 	handle /swarm-relay/swarm/nodes/* {
+		route {
+			import swarm_browser_auth
+			uri strip_prefix /swarm-relay
+			import swarm_upstream
+		}
+	}
+	# The Relay owns only its /swarm namespace. All other remote-prefixed paths
+	# are the relay host's Coddy root, including OpenAPI documents and future API
+	# namespaces, so they use Coddy's internal token instead of the relay token.
+	handle /swarm-relay/swarm/* {
 		route {
 			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
@@ -263,7 +260,7 @@
 		route {
 			import swarm_browser_auth
 			uri strip_prefix /swarm-relay
-			import swarm_upstream
+			import coddy_upstream
 		}
 	}
 

@@ -8,6 +8,23 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.4] - 2026-10-21
+
+### Fixed
+
+- Routed only `/swarm-relay/swarm/*` to the Swarm Relay. Every other protected
+  path below `/swarm-relay/` now reaches the relay host's Coddy backend with
+  `CODDY_API_TOKEN`, including `openapi.json`, `openapi.yaml`, and current or
+  future Coddy API namespaces.
+- Allowed loopback CORS preflight for the protected OpenAPI JSON and YAML
+  documents. Real requests still require a Keycloak or Telegram session.
+
+### Added
+
+- Regression and smoke coverage for OpenAPI documents at the primary Coddy
+  root, relay-host root, and every mounted Swarm node across cookie, bearer,
+  CLI and Telegram authentication paths.
+
 ## [1.3.3] - 2026-10-19
 
 Proven on the reference deployment against Coddy 1.3.28: all 110 end-to-end

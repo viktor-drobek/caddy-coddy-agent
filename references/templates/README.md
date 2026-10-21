@@ -180,9 +180,9 @@ Set `CODDY_SWARM_TOKEN` in the edge `.env` to the relay's `swarm.auth_token`, th
 `./deploy.sh`. Configure the Coddy UI remote as `@@PUBLIC_URL@@/swarm-relay`. Caddy accepts the
 browser's Keycloak or Telegram session, strips the caller's `Authorization`, and sends the relay
 token only to the Swarm backend. After the UI recognises the relay it may use absolute
-`/swarm/*` paths; those are routed to the same backend. Requests under `/swarm-relay/coddy/*` and
-`/swarm-relay/v1/*` describe the relay host's own Coddy API and therefore use
-`CODDY_API_TOKEN` instead. A node mounted by the Relay has its complete API below
+`/swarm/*` paths; those are routed to the same backend. Only `/swarm-relay/swarm/*` belongs to
+the Relay: every other path under `/swarm-relay/`, including `openapi.json`, `openapi.yaml` and
+the relay host's own Coddy API, uses `CODDY_API_TOKEN` instead. A node mounted by the Relay has its complete API below
 `/swarm-relay/swarm/nodes/<name>/`: Caddy sends every one of those paths to the Relay with
 `CODDY_SWARM_TOKEN`, and the Relay replaces it with that node's own credential. Do not route a
 mounted node to `CODDY_BACKEND`. `/swarm/info` belongs to a Relay itself, so an ordinary mounted

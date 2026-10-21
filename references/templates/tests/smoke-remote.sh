@@ -45,9 +45,12 @@ expect "page load without session -> 302" 302 "$(code -H 'Accept: text/html' $UR
 contains "page load redirects to /oauth2/start" "/oauth2/start?rd=" "$(redirect -H 'Accept: text/html' $URL/)"
 expect "XHR without session -> 401 (no redirect)" 401 "$(code -H 'Accept: application/json' $URL/coddy/sessions)"
 expect "EventSource without session -> 401" 401 "$(code -H 'Accept: text/event-stream' $URL/coddy/events)"
+expect "OpenAPI YAML without session -> 401" 401 "$(code -H 'Accept: application/yaml' $URL/openapi.yaml)"
 expect "junk bearer -> 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/coddy/sessions)"
 expect "junk bearer -> swarm relay 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/info)"
+expect "junk bearer -> relay-host OpenAPI YAML 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/openapi.yaml)"
 expect "junk bearer -> swarm node API 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/nodes/unreachable/coddy/auth/me)"
+expect "junk bearer -> swarm node OpenAPI YAML 401" 401 "$(code -H 'Authorization: Bearer junk' $URL/swarm-relay/swarm/nodes/unreachable/openapi.yaml)"
 expect "swarm absolute path without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm/info)"
 expect "swarm relay prefix without session -> 401" 401 "$(code -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
 expect "keycloak admin console anonymous -> 302" 302 "$(code -H 'Accept: text/html' $URL/auth/admin/master/console/)"
@@ -60,7 +63,7 @@ for path in /manifest.webmanifest /icon-192.png /icon-512.png /icon-maskable-512
 done
 
 echo "== local UI CORS preflight (no credentials)"
-for path in /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/v1/models /swarm-relay/coddy/auth/me /swarm-relay/swarm/nodes/test-node/coddy/auth/me; do
+for path in /openapi.json /openapi.yaml /v1/models /coddy/auth/me /swarm/info /swarm-relay/swarm/info /swarm-relay/openapi.yaml /swarm-relay/v1/models /swarm-relay/coddy/auth/me /swarm-relay/swarm/nodes/test-node/openapi.yaml /swarm-relay/swarm/nodes/test-node/coddy/auth/me; do
   HEADERS=$(curl -s $R -X OPTIONS -D - -o /dev/null \
     -H 'Origin: http://localhost:18080' \
     -H 'Access-Control-Request-Method: GET' \
@@ -94,6 +97,7 @@ contains "callback lands on / with 200" "200 $URL/" "$(cat $TMP/final)"
 contains "Coddy web UI served" "<title>Coddy Agent</title>" "$(cat $TMP/root.html)"
 contains "/coddy/auth/me authenticated via cookie" '"authenticated":true' "$($C -H 'Accept: application/json' $URL/coddy/auth/me)"
 expect "/coddy/sessions via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/coddy/sessions)"
+expect "/openapi.yaml via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/yaml' $URL/openapi.yaml)"
 # Activity from another live session may precede the ready marker. Keep enough of
 # the initial stream to see the marker instead of assuming it is the first event.
 contains "SSE /coddy/events streams" "coddy.events_ready" "$(timeout 5 $C -N -H 'Accept: text/event-stream' $URL/coddy/events 2>/dev/null | head -c 4096)"
@@ -103,6 +107,7 @@ if [ -z "${CODDY_SWARM_TOKEN:-}" ]; then
 else
   expect "swarm absolute /swarm/info via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm/info)"
   expect "swarm prefixed /swarm/info via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
+  expect "swarm relay-host OpenAPI YAML via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/yaml' $URL/swarm-relay/openapi.yaml)"
   expect "swarm remote root /v1/models via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
   SWARM_SESSIONS=/tmp/coddy-smoke/swarm-sessions.json
   expect "swarm sessions fan-out -> 200" 200 "$($C -o "$SWARM_SESSIONS" -w '%{http_code}' -H 'Accept: application/json' "$URL/swarm/sessions?limit=1")"
@@ -121,7 +126,7 @@ PY
 )
   if [ -n "$SWARM_NODE" ]; then
     NODE_MOUNT="$URL/swarm-relay/swarm/nodes/$SWARM_NODE"
-    expect "swarm node OpenAPI via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/openapi.json)"
+    expect "swarm node OpenAPI YAML via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/yaml' $NODE_MOUNT/openapi.yaml)"
     expect "swarm node /coddy/auth/me via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $NODE_MOUNT/coddy/auth/me)"
     NODE_SESSIONS="$TMP/node-sessions.json"
     expect "swarm node /coddy/sessions via cookie -> 200" 200 "$($C -o "$NODE_SESSIONS" -w '%{http_code}' -H 'Accept: application/json' "$NODE_MOUNT/coddy/sessions?limit=1")"
@@ -152,6 +157,7 @@ contains "service token audience includes coddy-web" "coddy-web" "$AUD"
 contains "service token -> /coddy/auth/me authenticated" '"authenticated":true' "$(curl -s $R -H "Authorization: Bearer $ST" $URL/coddy/auth/me)"
 expect "service token -> /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $ST" $URL/coddy/sessions)"
 if [ -n "${CODDY_SWARM_TOKEN:-}" ] && [ -n "${SWARM_NODE:-}" ]; then
+  expect "service token -> swarm node OpenAPI YAML 200" 200 "$(code -H "Authorization: Bearer $ST" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/openapi.yaml")"
   expect "service token -> swarm node /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $ST" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
   expect "service token -> swarm node /v1/models 200" 200 "$(code -H "Authorization: Bearer $ST" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/v1/models")"
 fi
@@ -165,6 +171,7 @@ expect "coddy-cli token -> /coddy/sessions 200" 200 "$(code -H "Authorization: B
 if [ -n "${CODDY_SWARM_TOKEN:-}" ]; then
   expect "coddy-cli token -> swarm absolute /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm/info)"
   expect "coddy-cli token -> swarm prefixed /swarm/info 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm-relay/swarm/info)"
+  expect "coddy-cli token -> relay-host OpenAPI YAML 200" 200 "$(code -H "Authorization: Bearer $CT" $URL/swarm-relay/openapi.yaml)"
   if [ -n "${SWARM_NODE:-}" ]; then
     expect "coddy-cli token -> swarm node /coddy/sessions 200" 200 "$(code -H "Authorization: Bearer $CT" "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
   fi
@@ -213,10 +220,12 @@ PYSIGN
   if [ -n "${CODDY_SWARM_TOKEN:-}" ]; then
     expect "telegram cookie -> swarm absolute path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm/info)"
     expect "telegram cookie -> swarm prefixed path 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
+    expect "telegram cookie -> relay-host OpenAPI YAML 200" 200 "$(code -b $TJ -H 'Accept: application/yaml' $URL/swarm-relay/openapi.yaml)"
     expect "telegram cookie -> swarm remote root 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
     if [ -n "${SWARM_NODE:-}" ]; then
       expect "telegram cookie -> swarm node /coddy/sessions 200" 200 "$(code -b $TJ -H 'Accept: application/json' "$URL/swarm-relay/swarm/nodes/$SWARM_NODE/coddy/sessions?limit=1")"
       expect "telegram cookie -> swarm node /v1/models 200" 200 "$(code -b $TJ -H 'Accept: application/json' $URL/swarm-relay/swarm/nodes/$SWARM_NODE/v1/models)"
+      expect "telegram cookie -> swarm node OpenAPI YAML 200" 200 "$(code -b $TJ -H 'Accept: application/yaml' $URL/swarm-relay/swarm/nodes/$SWARM_NODE/openapi.yaml)"
     fi
   fi
   expect "signed initData of a user not on the list -> 403" 403 "$(code -X POST -H 'Content-Type: text/plain' --data-binary "$(sign $OTHER 0)" $URL/tg/auth/login)"

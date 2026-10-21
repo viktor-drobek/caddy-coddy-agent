@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.3.3
+version: 1.3.4
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -72,7 +72,8 @@ Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
   `swarm.cors` for Relay calls. `allow_loopback: true` there admits a UI served from
   the user's own machine; setting it on the local client does not change remote responses.
 - The Caddy template answers unauthenticated `OPTIONS` from exactly
-  `http://localhost:18080` on `/v1/*`, `/coddy/*`, `/swarm/*` and `/swarm-relay/*`.
+  `http://localhost:18080` on `/openapi.json`, `/openapi.yaml`, `/v1/*`, `/coddy/*`, `/swarm/*`
+  and `/swarm-relay/*`.
   Real requests still require the existing Keycloak or Telegram authentication.
   Never bypass authentication for a real request to make a CORS alert disappear.
 - Check the failing path and both preflight and real response. A valid Bearer GET

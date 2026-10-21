@@ -139,7 +139,7 @@ esac''')
         self.assertIn("method OPTIONS", lines)
         self.assertIn("header Origin http://localhost:18080", lines)
         paths = next(line.split()[1:] for line in lines if line.startswith("path "))
-        self.assertCountEqual(paths, ("/swarm/*", "/swarm-relay/*", "/v1/*", "/coddy/*"))
+        self.assertCountEqual(paths, ("/openapi.json", "/openapi.yaml", "/swarm/*", "/swarm-relay/*", "/v1/*", "/coddy/*"))
         handler = config.split("\thandle @swarm_loopback_preflight {\n", 1)[1].split("\n\t}", 1)[0]
         self.assertIn("respond 204", handler)
         self.assertIn("Access-Control-Allow-Origin http://localhost:18080", handler)
@@ -147,11 +147,13 @@ esac''')
         self.assertRegex(handler, r'Access-Control-Allow-Headers "Authorization,')
         self.assertNotIn("reverse_proxy", handler)
         self.assertNotIn("import ", handler)
-        for protected in ("handle @swarm_canvas_capability", "handle /swarm-relay/coddy/*", "handle /swarm-relay/swarm/nodes/*", "handle /swarm/*",
+        for protected in ("handle @swarm_canvas_capability", "handle /swarm-relay/swarm/nodes/*", "handle /swarm-relay/swarm/*", "handle /swarm-relay/*", "handle /swarm/*",
                           "handle @tg", "handle @bearer", "handle @page"):
             with self.subTest(protected=protected):
                 self.assertLess(config.index("handle @swarm_loopback_preflight"), config.index(protected))
         self.assertLess(config.index("handle /swarm-relay/swarm/nodes/*"),
+                        config.index("handle /swarm-relay/swarm/*"))
+        self.assertLess(config.index("handle /swarm-relay/swarm/*"),
                         config.index("handle /swarm-relay/*"))
         self.assertLess(config.index("handle @swarm_canvas_capability"),
                         config.index("handle /swarm-relay/swarm/nodes/*"))
@@ -297,10 +299,10 @@ class ProxyTest(SiteFixture):
         finally:
             connection.close()
 
-    PREFLIGHT_PATHS = ("/v1/models", "/coddy/auth/me", "/swarm/topology",
-                       "/swarm-relay/swarm/topology", "/swarm-relay/v1/models",
+    PREFLIGHT_PATHS = ("/openapi.json", "/openapi.yaml", "/v1/models", "/coddy/auth/me", "/swarm/topology",
+                       "/swarm-relay/swarm/topology", "/swarm-relay/openapi.yaml", "/swarm-relay/v1/models",
                        "/swarm-relay/coddy/auth/me",
-                       "/swarm-relay/swarm/nodes/ml/coddy/auth/me",
+                       "/swarm-relay/swarm/nodes/ml/openapi.yaml", "/swarm-relay/swarm/nodes/ml/coddy/auth/me",
                        "/swarm-relay/swarm/nodes/ml/v1/models")
 
     def test_loopback_api_preflight_bypasses_auth_and_backends(self):
@@ -435,6 +437,7 @@ class ProxyTest(SiteFixture):
     def test_swarm_node_mount_uses_relay_token_for_the_complete_api(self):
         paths = (
             ("/swarm-relay/swarm/nodes/ml/openapi.json", "/swarm/nodes/ml/openapi.json"),
+            ("/swarm-relay/swarm/nodes/ml/openapi.yaml", "/swarm/nodes/ml/openapi.yaml"),
             ("/swarm-relay/swarm/nodes/ml/coddy/auth/me", "/swarm/nodes/ml/coddy/auth/me"),
             ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "/swarm/nodes/ml/coddy/sessions"),
             ("/swarm-relay/swarm/nodes/ml/coddy/sessions/sess-1/changes", "/swarm/nodes/ml/coddy/sessions/sess-1/changes"),
@@ -474,6 +477,8 @@ class ProxyTest(SiteFixture):
 
     def test_swarm_remote_root_uses_coddy_backend_token(self):
         for path, upstream_path in (
+                ("/swarm-relay/openapi.json", "/openapi.json"),
+                ("/swarm-relay/openapi.yaml", "/openapi.yaml"),
                 ("/swarm-relay/coddy/auth/me", "/coddy/auth/me"),
                 ("/swarm-relay/v1/models", "/v1/models")):
             with self.subTest(path=path):
@@ -488,10 +493,12 @@ class ProxyTest(SiteFixture):
 
     def test_api_bearer_reaches_verifier_and_keeps_backend_tokens_isolated(self):
         for path, backend, upstream_path, token in (
+                ("/openapi.yaml", "coddy", "/openapi.yaml", "test-coddy-token"),
                 ("/v1/models", "coddy", "/v1/models", "test-coddy-token"),
                 ("/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
                 ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm-relay/openapi.yaml", "coddy", "/openapi.yaml", "test-coddy-token"),
                 ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
                 ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token"),
                 ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "swarm", "/swarm/nodes/ml/coddy/sessions", "test-swarm-token"),
@@ -537,6 +544,7 @@ class ProxyTest(SiteFixture):
         for path, backend, upstream_path, token in (
                 ("/swarm-relay/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
                 ("/swarm/topology", "swarm", "/swarm/topology", "test-swarm-token"),
+                ("/swarm-relay/openapi.yaml", "coddy", "/openapi.yaml", "test-coddy-token"),
                 ("/swarm-relay/coddy/auth/me", "coddy", "/coddy/auth/me", "test-coddy-token"),
                 ("/swarm-relay/v1/models", "coddy", "/v1/models", "test-coddy-token"),
                 ("/swarm-relay/swarm/nodes/ml/coddy/sessions", "swarm", "/swarm/nodes/ml/coddy/sessions", "test-swarm-token"),
