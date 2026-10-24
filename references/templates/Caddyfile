@@ -225,11 +225,13 @@
 		not header Authorization Bearer*
 	}
 	# Coddy's canvas capability route is intentionally unauthenticated at the
-	# Relay. It must precede the general node-mount handler, which adds the
-	# relay client token and requires a user session.
+	# Relay. The UI can address a mounted node through either its remote prefix
+	# or the Relay's absolute /swarm path. This must precede the general
+	# node-mount handler, which adds the relay client token and requires a user
+	# session.
 	@swarm_canvas_capability {
 		method GET HEAD OPTIONS
-		path_regexp canvas_capability ^/swarm-relay/swarm/nodes/[^/]+/coddy/canvas/[^/]+(?:/.*)?$
+		path_regexp canvas_capability ^/(?:swarm-relay/)?swarm/nodes/[^/]+/coddy/canvas/[^/]+(?:/.*)?$
 	}
 	handle @swarm_canvas_capability {
 		route {

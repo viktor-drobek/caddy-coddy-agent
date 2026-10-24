@@ -1,6 +1,6 @@
 ---
 name: caddy-coddy
-version: 1.3.4
+version: 1.3.5
 description: >
   Run when the user invokes /caddy-coddy (with plan, build, validate, deploy, verify or ops), or asks to
   expose a Coddy server (coddy serve) on a public HTTPS address with real user logins. Plans the
@@ -55,10 +55,11 @@ Coddy's token, and Coddy's own sign-in screen is never shown behind the proxy.
   `CODDY_API_TOKEN`. The Relay presents the node credential itself. `/swarm/info` is the Relay's
   own endpoint, so a mounted ordinary node may correctly return `404` for
   `/swarm/nodes/<name>/swarm/info`.
-- Canvas frames are the narrow capability exception. A mounted path below
-  `/swarm-relay/swarm/nodes/<name>/coddy/canvas/<capability>/` accepts only
-  `GET`, `HEAD` and `OPTIONS` without edge authentication. Strip `Authorization`
-  and cookies before proxying it to the Relay; the Relay validates the signed
+- Canvas frames are the narrow capability exception. The two mounted URLs
+  `/swarm/nodes/<name>/coddy/canvas/<capability>/` and
+  `/swarm-relay/swarm/nodes/<name>/coddy/canvas/<capability>/` accept only `GET`,
+  `HEAD` and `OPTIONS` without edge authentication. Strip `Authorization` and
+  cookies before proxying either to the Relay; the Relay validates the signed
   capability and supplies CORS for the iframe's `null` origin. Never apply this
   bypass to another node API route.
 - Treat “local relay is unreachable or unauthorized” as a symptom, not a diagnosis. Correlate the

@@ -58,12 +58,13 @@ Also load-bearing:
   declared icons: `/manifest.webmanifest`, `/icon-192.png`, `/icon-512.png` and
   `/icon-maskable-512.png`. Caddy still adds `CODDY_API_TOKEN` upstream. Do not turn this exact
   allow-list into a broad static-file or API exception.
-- A mounted canvas is a second capability exception: `GET`, `HEAD` and `OPTIONS` below
+- A mounted canvas is a second capability exception: `GET`, `HEAD` and `OPTIONS` below either
+  `/swarm/nodes/<name>/coddy/canvas/<capability>/` or
   `/swarm-relay/swarm/nodes/<name>/coddy/canvas/<capability>/` bypass edge authentication and
-  reach the Relay with both `Authorization` and cookies removed. The Relay verifies the
-  path capability, returns `Access-Control-Allow-Origin: *` for the opaque iframe origin and
-  refuses every other `Origin: null` request. Keep this matcher narrower than the general node
-  mount; no other node route may use this upstream.
+  reach the Relay with both `Authorization` and cookies removed. The Relay verifies the path
+  capability, returns `Access-Control-Allow-Origin: *` for the opaque iframe origin and refuses
+  every other `Origin: null` request. Keep this matcher narrower than the general node mount; no
+  other node route may use this upstream.
 - `cookie_csrf_per_request = true`, `cookie_csrf_expire = "2h"` and Keycloak's
   `accessCodeLifespanLogin = 3600`: a slow first login, password change included, must not end in
   "Unable to find a valid CSRF token".

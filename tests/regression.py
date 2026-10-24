@@ -157,6 +157,8 @@ esac''')
                         config.index("handle /swarm-relay/*"))
         self.assertLess(config.index("handle @swarm_canvas_capability"),
                         config.index("handle /swarm-relay/swarm/nodes/*"))
+        canvas_matcher = config.split("\t@swarm_canvas_capability {\n", 1)[1].split("\n\t}", 1)[0]
+        self.assertIn("^/(?:swarm-relay/)?swarm/nodes/", canvas_matcher)
 
     def deploy_trace(self, changes):
         edge = self.base / "edge"
@@ -455,25 +457,30 @@ class ProxyTest(SiteFixture):
                 self.assertNotIn("Authorization", auth[2])
 
     def test_swarm_canvas_capability_bypasses_user_and_relay_tokens(self):
-        path = "/swarm-relay/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"
-        upstream_path = "/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"
-        for method in ("GET", "HEAD", "OPTIONS"):
-            with self.subTest(method=method):
-                before = len(self.requests)
-                swarm_before = len(self.swarm_requests)
-                status, _, body = self.request(path, {
-                    "Authorization": "Bearer caller-token", "Cookie": "session=valid", "Origin": "null"}, method)
-                self.assertEqual(status, 200)
-                self.assertEqual(len(self.requests), before)
-                self.assertEqual(len(self.swarm_requests), swarm_before + 1)
-                upstream = self.swarm_requests[-1]
-                self.assertEqual(upstream[0:2], (upstream_path, method))
-                self.assertNotIn("Authorization", upstream[2])
-                self.assertNotIn("Cookie", upstream[2])
-                if method == "HEAD":
-                    self.assertEqual(body, b"")
-                else:
-                    self.assertEqual(json.loads(body)["backend"], "swarm")
+        paths = (
+            ("/swarm-relay/swarm/nodes/ml/coddy/canvas/capability/assets/app.js",
+             "/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"),
+            ("/swarm/nodes/ml/coddy/canvas/capability/assets/app.js",
+             "/swarm/nodes/ml/coddy/canvas/capability/assets/app.js"),
+        )
+        for path, upstream_path in paths:
+            for method in ("GET", "HEAD", "OPTIONS"):
+                with self.subTest(path=path, method=method):
+                    before = len(self.requests)
+                    swarm_before = len(self.swarm_requests)
+                    status, _, body = self.request(path, {
+                        "Authorization": "Bearer caller-token", "Cookie": "session=valid", "Origin": "null"}, method)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(len(self.requests), before)
+                    self.assertEqual(len(self.swarm_requests), swarm_before + 1)
+                    upstream = self.swarm_requests[-1]
+                    self.assertEqual(upstream[0:2], (upstream_path, method))
+                    self.assertNotIn("Authorization", upstream[2])
+                    self.assertNotIn("Cookie", upstream[2])
+                    if method == "HEAD":
+                        self.assertEqual(body, b"")
+                    else:
+                        self.assertEqual(json.loads(body)["backend"], "swarm")
 
     def test_swarm_remote_root_uses_coddy_backend_token(self):
         for path, upstream_path in (

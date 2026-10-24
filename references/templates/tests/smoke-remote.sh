@@ -109,6 +109,17 @@ else
   expect "swarm prefixed /swarm/info via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/swarm/info)"
   expect "swarm relay-host OpenAPI YAML via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/yaml' $URL/swarm-relay/openapi.yaml)"
   expect "swarm remote root /v1/models via cookie -> 200" 200 "$($C -o /dev/null -w '%{http_code}' -H 'Accept: application/json' $URL/swarm-relay/v1/models)"
+
+  # A malformed canvas capability must still reach the Relay without a user
+  # session. The Relay rejects its malformed signature with 403; an edge-auth
+  # rejection would be 401 instead. A valid capability owns its CORS response.
+  for canvas_path in \
+    /swarm/nodes/test-node/coddy/canvas/not-a-capability/index.html \
+    /swarm-relay/swarm/nodes/test-node/coddy/canvas/not-a-capability/index.html; do
+    CANVAS_HEADERS=$(curl -s $R -D - -o /dev/null -H 'Origin: null' "$URL$canvas_path" | tr -d '\r')
+    expect "canvas capability $canvas_path reaches Relay -> 403" 403 "$(printf '%s\n' "$CANVAS_HEADERS" | awk '/^HTTP\// {status=$2} END {print status}')"
+  done
+
   SWARM_SESSIONS=/tmp/coddy-smoke/swarm-sessions.json
   expect "swarm sessions fan-out -> 200" 200 "$($C -o "$SWARM_SESSIONS" -w '%{http_code}' -H 'Accept: application/json' "$URL/swarm/sessions?limit=1")"
   SHAPE=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print("valid" if d.get("object") == "swarm.session_list" and isinstance(d.get("warnings"), list) else "invalid")' "$SWARM_SESSIONS" 2>/dev/null || echo invalid)

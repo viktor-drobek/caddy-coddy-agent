@@ -8,6 +8,22 @@ fixes behaviour. Each release is a `vX.Y.Z` tag with a GitHub release built by
 the `Release` workflow; install a specific one with
 `coddy skills add viktor-drobek/caddy-coddy-agent@vX.Y.Z`.
 
+## [1.3.5] - 2026-10-24
+
+### Fixed
+
+- Passed signed canvas capability URLs at both the Relay's absolute
+  `/swarm/nodes/<name>/...` mount and the `/swarm-relay/swarm/nodes/<name>/...`
+  remote prefix directly to the Relay. The bypass remains limited to `GET`,
+  `HEAD` and `OPTIONS` below the capability path; every other node API keeps
+  user authentication and its normal token isolation.
+
+### Added
+
+- Regression and smoke coverage that distinguishes an invalid capability
+  rejected by the Relay (with its opaque-frame CORS response) from an edge
+  authentication rejection.
+
 ## [1.3.4] - 2026-10-21
 
 ### Fixed
